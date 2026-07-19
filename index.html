@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORM Ratings Console — Google Play</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-2:#1c232d; --line:#2a323d;
+    --ink:#e6edf3; --ink-dim:#8b98a5; --ink-faint:#5b6773;
+    --alert:#ff5c5c; --alert-bg:#241619; --warn:#f2b544; --ok:#3fb950;
+    --accent:#4c8dff;
+    --mono:'SF Mono',ui-monospace,'Cascadia Mono','Roboto Mono',Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-feature-settings:"tnum" 1;line-height:1.4;padding:24px;min-height:100vh}
+  .wrap{max-width:1000px;margin:0 auto}
+
+  header.top{display:flex;align-items:baseline;justify-content:space-between;
+    flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:20px}
+  .title{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);font-weight:600}
+  .title b{color:var(--ink);font-weight:700}
+  .asof{font-family:var(--mono);font-size:12px;color:var(--ink-faint);text-align:right}
+  .asof .refresh{color:var(--accent);cursor:pointer;text-decoration:none;margin-left:8px}
+  .asof .refresh:hover{text-decoration:underline}
+
+  .controls{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:22px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel);color:var(--ink-dim);border:0;padding:8px 14px;
+    font-family:var(--mono);font-size:12px;cursor:pointer;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.active{background:var(--panel-2);color:var(--ink)}
+  .search{flex:1;min-width:180px;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:8px 12px;color:var(--ink);font-family:var(--mono);font-size:13px}
+  .search::placeholder{color:var(--ink-faint)}
+  .search:focus{outline:none;border-color:var(--accent)}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:26px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .stat .n{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.02em}
+  .stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-dim);margin-top:4px}
+  .stat.alert .n{color:var(--alert)}
+  .stat.ok .n{color:var(--ok)}
+
+  .list{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .lhead,.lrow{display:grid;grid-template-columns:44px 1fr 150px 150px 150px;align-items:center;gap:14px}
+  .lhead{padding:10px 16px;background:var(--panel-2);border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+  .lrow{padding:11px 16px;border-bottom:1px solid var(--line);background:var(--panel);transition:background .12s}
+  .lrow:last-child{border-bottom:0}
+  .lrow:hover{background:var(--panel-2)}
+  .lrow.below{background:linear-gradient(90deg,var(--alert-bg),var(--panel) 60%)}
+  .lrow.below:hover{background:linear-gradient(90deg,#2c181c,var(--panel-2) 60%)}
+  .cc{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.04em}
+  .cname{font-size:13px;color:var(--ink-dim)}
+  .lrow.below .cname{color:var(--ink)}
+  .rating-cell{display:flex;align-items:center;gap:9px;justify-self:end}
+  .rating{font-family:var(--mono);font-size:16px;font-weight:600;min-width:44px;text-align:right}
+  .spark{width:70px;height:5px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex-shrink:0}
+  .spark i{display:block;height:100%;border-radius:3px}
+  .status{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    display:inline-flex;align-items:center;gap:6px;color:var(--ink-dim)}
+  .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .prep{background:transparent;border:1px solid var(--line);color:var(--ink-dim);
+    font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;
+    padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;justify-self:end;transition:.12s}
+  .prep:hover{border-color:var(--accent);color:var(--accent)}
+  .lrow.below .prep{border-color:var(--alert);color:var(--alert)}
+  .lrow.below .prep:hover{background:var(--alert);color:#fff}
+
+  .state{padding:40px;text-align:center;font-family:var(--mono);font-size:13px;color:var(--ink-faint)}
+  footer{margin-top:16px;padding-top:14px;
+    font-family:var(--mono);font-size:11px;color:var(--ink-faint);line-height:1.7}
+  code{background:var(--panel-2);padding:1px 5px;border-radius:4px;color:var(--ink-dim)}
+  @media(max-width:720px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .lhead{display:none}
+    .lrow{grid-template-columns:1fr auto;grid-template-areas:"id rating" "status action";
+      gap:8px 14px;padding:12px 14px}
+    .lrow .idcell{grid-area:id} .lrow .rating-cell{grid-area:rating;justify-self:end}
+    .lrow .status{grid-area:status} .lrow .prep{grid-area:action}
+    .lrow .cname{display:none}
+    body{padding:14px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="title"><b>ORM Ratings Console</b> &nbsp;·&nbsp; Google Play</div>
+    <div class="asof" id="asof">loading…</div>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="filter">
+      <button data-f="below" class="active">Below 4.2</button>
+      <button data-f="all">All</button>
+      <button data-f="ok">4.2+</button>
+    </div>
+    <input class="search" id="search" placeholder="filter country…">
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="list">
+    <div class="lhead">
+      <div>Code</div><div>Country</div><div style="text-align:right">Rating</div>
+      <div>Status</div><div style="text-align:right">Action</div>
+    </div>
+    <div id="rows"><div class="state">Fetching live ratings…</div></div>
+  </div>
+
+  <footer>
+    Threshold <code>4.20</code> · live from <code>ratings_cache</code> (Play Console → Apps Script → Sheets).
+    Every country can launch a campaign; below-threshold rows are flagged as needed.<br>
+    "Prepare campaign" is a stub until Phase 2 (Metabase → CSV → Slack).
+  </footer>
+</div>
+
+<script>
+const THRESHOLD = 4.2;
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTzZ8pqSrYJRNpDro_Q58j2UWdN5eoE5gmBYc6apOnhWGheevdM0HTD3P8Q1KJkRgZu3sITJ8vbjFPQ/pub?gid=1230559235&single=true&output=csv';
+
+const REGION = new Intl.DisplayNames(['en'],{type:'region'});
+function name(cc){
+  if(cc==='ZZ') return 'Unknown / Other';
+  try{ return REGION.of(cc)||cc; }catch(e){ return cc; }
+}
+function color(v){ if(v===null) return 'var(--ink-faint)'; if(v<THRESHOLD) return 'var(--alert)';
+  if(v<4.5) return 'var(--warn)'; return 'var(--ok)'; }
+
+let DATA=[], current='below', query='';
+
+/* Parse the published cache CSV. Columns:
+   Package, Country, Total Average Rating, Daily Average Rating, As Of Date, Below Threshold, Fetched At */
+function parseCsv(txt){
+  const lines=txt.trim().split(/\r?\n/);
+  return lines.slice(1).map(line=>{
+    const c=line.split(',');
+    return {
+      country:c[1],
+      total:c[2]===''?null:parseFloat(c[2]),
+      daily:parseFloat(c[3])||0,
+      date:c[4]
+    };
+  }).filter(d=>d.country);
+}
+
+async function load(){
+  document.getElementById('asof').textContent='loading…';
+  try{
+    const txt=await (await fetch(CSV_URL,{cache:'no-store'})).text();
+    DATA=parseCsv(txt);
+    const dates=DATA.map(d=>d.date).filter(Boolean).sort();
+    const latest=dates[dates.length-1]||'—';
+    document.getElementById('asof').innerHTML=
+      `app: com.iqoption &nbsp;·&nbsp; data as of ${latest} <a class="refresh" onclick="load()">↻ refresh</a>`;
+    render();
+  }catch(e){
+    document.getElementById('rows').innerHTML=
+      `<div class="state">Could not load live data.<br>${e.message}<br><br>`+
+      `Check the published CSV URL is still valid.</div>`;
+    document.getElementById('asof').textContent='load failed';
+  }
+}
+
+function render(){
+  const rated=DATA.filter(d=>d.total!==null);
+  const below=rated.filter(d=>d.total<THRESHOLD);
+  const ok=rated.filter(d=>d.total>=THRESHOLD);
+  const avg=rated.length?rated.reduce((s,d)=>s+d.total,0)/rated.length:0;
+
+  document.getElementById('stats').innerHTML=`
+    <div class="stat alert"><div class="n">${below.length}</div><div class="l">Below 4.2</div></div>
+    <div class="stat ok"><div class="n">${ok.length}</div><div class="l">Within target</div></div>
+    <div class="stat"><div class="n">${rated.length}</div><div class="l">Countries reporting</div></div>
+    <div class="stat"><div class="n">${avg.toFixed(2)}</div><div class="l">Mean country avg</div></div>`;
+
+  const q=query.toUpperCase();
+  const match=d=>!q||d.country.includes(q)||name(d.country).toUpperCase().includes(q);
+  let list=rated.filter(match);
+  if(current==='below') list=list.filter(d=>d.total<THRESHOLD);
+  if(current==='ok') list=list.filter(d=>d.total>=THRESHOLD);
+  list.sort((a,b)=>a.total-b.total);
+
+  document.getElementById('rows').innerHTML =
+    list.length ? list.map(row).join('') : '<div class="state">No countries match.</div>';
+}
+
+function row(d){
+  const below=d.total<THRESHOLD;
+  const pct=Math.max(4,(d.total/5)*100);
+  const c=color(d.total);
+  return `<div class="lrow ${below?'below':''}">
+    <div class="idcell cc">${d.country}</div>
+    <div class="cname">${name(d.country)}</div>
+    <div class="rating-cell">
+      <div class="spark"><i style="width:${pct}%;background:${c}"></i></div>
+      <div class="rating" style="color:${c}">${d.total.toFixed(2)}</div>
+    </div>
+    <div class="status"><span class="dot" style="background:${c}"></span>${below?'Campaign needed':'Within target'}</div>
+    <button class="prep" onclick="prep('${d.country}')">Prepare campaign</button>
+  </div>`;
+}
+
+function prep(cc){
+  alert(`Prepare campaign → ${name(cc)} (${cc})\n\nStub only. Phase 2 wires this to:\n`+
+    `1. Metabase query (target user IDs)\n2. CSV generation\n3. Slack submission post\n4. State = RUNNING`);
+}
+
+document.getElementById('filter').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  [...e.currentTarget.children].forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active'); current=e.target.dataset.f; render();
+});
+document.getElementById('search').addEventListener('input',e=>{query=e.target.value;render();});
+
+load();
+</script>
+</body>
+</html>
