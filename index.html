@@ -215,6 +215,11 @@ function cname(cc){ if(cc==='ZZ')return 'Unknown / Other'; try{return REGION.of(
 function color(v){ if(v==null)return 'var(--ink-faint)'; if(v<THRESHOLD)return 'var(--alert)'; if(v<4.5)return 'var(--warn)'; return 'var(--ok)'; }
 function splitCsvLine(line){ const o=[];let f='',q=false; for(let i=0;i<line.length;i++){const c=line[i];
   if(q){if(c==='"'){if(line[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;} else{if(c==='"')q=true;else if(c===','){o.push(f);f='';}else f+=c;}} o.push(f);return o; }
+/* Safe integer parse: rejects date-like strings (e.g. "1900-05-14" from Sheets
+   coercing a count into a date) so a formatting slip can't inflate a number. */
+function safeInt(v){ if(v==null) return 0; const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return 0;   // looks like a date, not a count
+  const n=parseInt(s.replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; }
 
 /* State */
 let LATEST=[];               // latest snapshot rows {country,total,daily,installs,date}
@@ -245,7 +250,7 @@ async function load(){
 function parseCache(txt){
   return txt.trim().split(/\r?\n/).slice(1).map(l=>{const c=splitCsvLine(l);
     return {country:c[1],total:c[2]===''?null:parseFloat(c[2]),daily:parseFloat(c[3])||0,
-      installs:parseInt(c[4],10)||0,date:c[5],redirects:0};}).filter(d=>d.country);
+      installs:safeInt(c[4]),date:c[5],redirects:0};}).filter(d=>d.country);
 }
 
 /* ratings_history: ISO Week,Country,Total Average Rating,Monthly New Installs,As Of Date,Recorded At */
@@ -258,7 +263,7 @@ async function loadHistory(){
     if(iw<0||ic<0||it<0) return;
     for(let r=1;r<rows.length;r++){const row=rows[r]; if(!row||row.length<=it)continue;
       const wk=row[iw],cc=row[ic]; if(!wk||!cc)continue;
-      (HISTORY[wk]=HISTORY[wk]||{})[cc]={total:parseFloat(row[it]),installs:parseInt(row[ii],10)||0};}
+      (HISTORY[wk]=HISTORY[wk]||{})[cc]={total:parseFloat(row[it]),installs:safeInt(row[ii])};}
   }catch(e){}
 }
 
