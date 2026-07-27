@@ -192,7 +192,7 @@
       <div class="field"><label>Duration (days)</label><input id="mDays" value="7"></div>
       <div class="field"><label>Bonus</label><input id="mBonus" value="$5 no-deposit"></div>
     </div>
-    <div class="field"><label>Languages</label><input id="mLangs" value="EN, ES"></div>
+    <div class="field"><label>Languages</label><input id="mLangs" value="EN"></div>
     <div class="field"><label>2 · Generated Slack message</label>
       <div class="msgbox" id="msg">Upload a CSV and fill the fields to generate the message…</div>
     </div>
@@ -213,7 +213,23 @@ const PUBLIC_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTzZ8pqSrYJR
 const APP_LINK = 'https://play.google.com/store/apps/details?id=com.iqoption';
 
 const NAME2CODE = {"Algeria":"DZ","Andorra":"AD","Angola":"AO","Anguilla":"AI","Argentina":"AR","Austria":"AT","Azerbaijan":"AZ","Bahamas":"BS","Bahrain":"BH","Bangladesh":"BD","Belize":"BZ","Bolivia":"BO","Botswana":"BW","Brazil":"BR","Burkina Faso":"BF","Cambodia":"KH","Cameroon":"CM","Chile":"CL","Colombia":"CO","Costa Rica":"CR","Democratic Republic of the Congo":"CD","Dominica":"DM","Dominican Republic":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Fiji":"FJ","France":"FR","Germany":"DE","Ghana":"GH","Guatemala":"GT","Honduras":"HN","Hong Kong":"HK","Iceland":"IS","India":"IN","Indonesia":"ID","Italy":"IT","Ivory Coast":"CI","Jamaica":"JM","Jersey":"JE","Kuwait":"KW","Laos":"LA","Lebanon":"LB","Lesotho":"LS","Madagascar":"MG","Malaysia":"MY","Mauritius":"MU","Mexico":"MX","Morocco":"MA","Mozambique":"MZ","Namibia":"NA","Nepal":"NP","Netherlands":"NL","Nicaragua":"NI","Niger":"NE","Nigeria":"NG","Oman":"OM","Pakistan":"PK","Panama":"PA","Papua New Guinea":"PG","Paraguay":"PY","Peru":"PE","Philippines":"PH","Poland":"PL","Portugal":"PT","Qatar":"QA","Romania":"RO","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Seychelles":"SC","Singapore":"SG","Somalia":"SO","South Africa":"ZA","South Korea":"KR","Spain":"ES","Sri Lanka":"LK","Tanzania":"TZ","Thailand":"TH","Togo":"TG","Turkey":"TR","Turks and Caicos Islands":"TC","Uganda":"UG","Ukraine":"UA","United Arab Emirates":"AE","Uruguay":"UY","Venezuela":"VE","Vietnam":"VN","Zimbabwe":"ZW"};
+const LANG_MAP = {
+  // Spanish speaking
+  "AR":"EN, ES", "BO":"EN, ES", "CL":"EN, ES", "CO":"EN, ES", "CR":"EN, ES", "DO":"EN, ES", "EC":"EN, ES", "SV":"EN, ES", "GT":"EN, ES", "HN":"EN, ES", "MX":"EN, ES", "NI":"EN, ES", "PA":"EN, ES", "PY":"EN, ES", "PE":"EN, ES", "UY":"EN, ES", "VE":"EN, ES", "ES":"EN, ES",
+  // Portuguese
+  "BR":"EN, PT", "PT":"EN, PT", "AO":"EN, PT", "MZ":"EN, PT",
+  // Asian Languages
+  "TH":"EN, TH", "VN":"EN, VI", "ID":"EN, ID", "MY":"EN, MS", "PH":"EN, TL", "IN":"EN, HI", "PK":"EN, UR", "BD":"EN, BN", "KH":"EN, KM", "KR":"EN, KO", "TW":"EN, ZH", "HK":"EN, ZH",
+  // Arabic speaking
+  "EG":"EN, AR", "DZ":"EN, AR", "MA":"EN, AR", "SA":"EN, AR", "AE":"EN, AR", "KW":"EN, AR", "QA":"EN, AR", "OM":"EN, AR", "BH":"EN, AR", "LB":"EN, AR",
+  // European
+  "FR":"EN, FR", "DE":"EN, DE", "IT":"EN, IT", "TR":"EN, TR", "PL":"EN, PL", "RO":"EN, RO", "UA":"EN, UK"
+};
 
+function getLangsForCountry(cc) {
+  return LANG_MAP[cc] || "EN";
+}
+  
 const REGION=new Intl.DisplayNames(['en'],{type:'region'});
 function cname(cc){ if(cc==='ZZ')return 'Unknown / Other'; try{return REGION.of(cc)||cc;}catch(e){return cc;} }
 function color(v){ if(v==null)return 'var(--ink-faint)'; if(v<THRESHOLD)return 'var(--alert)'; if(v<4.5)return 'var(--warn)'; return 'var(--ok)'; }
@@ -460,6 +476,10 @@ function openModal(cc,publicRating,installs){
 
   document.getElementById('mCountry').textContent=`${cname(cc)} (${cc})`;
   document.getElementById('mMeta').textContent=`Current rating ${pRatingText} · ${(installs||0).toLocaleString()} installs · Target: ~${targetReviews.toLocaleString()} reviews (${emailsNeeded.toLocaleString()} emails needed)`;
+  
+  // NEW LINE: Dynamically set the languages based on the country code
+  document.getElementById('mLangs').value = getLangsForCountry(cc);
+  
   document.getElementById('idcount').textContent='';
   const dp=document.getElementById('drop');dp.className='drop';dp.textContent='Drop CSV here or click to browse';
   document.getElementById('msg').textContent='Upload a CSV and fill the fields to generate the message…';
