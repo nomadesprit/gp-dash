@@ -16,7 +16,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--ink);font-family:var(--sans);
     font-feature-settings:"tnum" 1;line-height:1.4;padding:24px;min-height:100vh}
-  .wrap{max-width:1080px;margin:0 auto}
+  .wrap{max-width:1180px;margin:0 auto}
 
   header.top{display:flex;align-items:baseline;justify-content:space-between;
     flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:20px}
@@ -60,7 +60,7 @@
   .stat.alert .n{color:var(--alert)} .stat.ok .n{color:var(--ok)}
 
   .list{border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .lhead,.lrow{display:grid;grid-template-columns:44px 1fr 84px 78px 96px 96px 112px 118px;align-items:center;gap:10px}
+  .lhead,.lrow{display:grid;grid-template-columns:40px 1fr 70px 70px 55px 85px 85px 150px 118px;align-items:center;gap:8px}
   .lhead{padding:10px 14px;background:var(--panel-2);border-bottom:1px solid var(--line);
     font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
   .lrow{padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel);transition:background .12s}
@@ -70,15 +70,17 @@
   .lrow.below:hover{background:linear-gradient(90deg,#3a2614,var(--panel-2) 55%)}
   .cc{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.04em}
   .cname{font-size:13px;color:var(--ink-dim)} .lrow.below .cname{color:var(--ink)}
-  .rating-cell{display:flex;align-items:center;gap:8px;justify-self:end}
-  .rating{font-family:var(--mono);font-size:16px;font-weight:600;min-width:42px;text-align:right}
-  .spark{width:44px;height:5px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex-shrink:0}
+  .rating-cell{display:flex;align-items:center;gap:6px;justify-self:end}
+  .rating{font-family:var(--mono);font-size:15px;font-weight:600;min-width:38px;text-align:right}
+  .spark{width:36px;height:5px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex-shrink:0}
   .spark i{display:block;height:100%;border-radius:3px}
   .delta{font-family:var(--mono);font-size:12px;justify-self:end;font-weight:600}
   .delta.up{color:var(--up)} .delta.down{color:var(--down)} .delta.flat{color:var(--ink-faint)}
   .num{font-family:var(--mono);font-size:13px;color:var(--ink-dim);justify-self:end}
-  .status{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
-    display:inline-flex;align-items:center;gap:6px;color:var(--ink-dim)}
+  .status{font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+    display:flex;flex-direction:column;gap:2px;color:var(--ink-dim)}
+  .status .main-status{display:inline-flex;align-items:center;gap:5px}
+  .status .sub-info{font-size:9px;color:var(--ink-faint)}
   .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
   .prep{background:transparent;border:1px solid var(--line);color:var(--ink-dim);
     font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;
@@ -153,17 +155,21 @@
 
   <div class="list">
     <div class="lhead">
-      <div>Code</div><div>Country</div><div style="text-align:right">Rating</div>
+      <div>Code</div><div>Country</div>
+      <div style="text-align:right">GP Rate</div>
+      <div style="text-align:right">Public</div>
       <div style="text-align:right">Δ</div>
-      <div style="text-align:right">Installs</div><div style="text-align:right">Redirects</div>
-      <div>Status</div><div style="text-align:right">Action</div>
+      <div style="text-align:right">Installs</div>
+      <div style="text-align:right">Redirects</div>
+      <div>Status / Goal</div>
+      <div style="text-align:right">Action</div>
     </div>
     <div id="rows"><div class="state">Fetching live data…</div></div>
   </div>
 
   <footer>
-    Rating threshold <code>4.20</code> · weekly history · popup redirects = IQ Option + Android.<br>
-    <b>Δ</b> shows rating change vs the previous period when <b>Compare</b> is on. Click <b>Prepare campaign</b> to upload a Metabase user-ID CSV and generate the Slack submission.
+    Rating threshold <code>4.20</code> · Target threshold <code>4.30</code> · weekly history · popup redirects = IQ Option + Android.<br>
+    Target campaign calculation: <code>installs * 3% = target 5★ reviews</code>, required emails = <code>target / (1% * 80%)</code>.
   </footer>
 </div>
 
@@ -202,10 +208,9 @@
 <script>
 const THRESHOLD = 4.2;
 const CACHE_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTzZ8pqSrYJRNpDro_Q58j2UWdN5eoE5gmBYc6apOnhWGheevdM0HTD3P8Q1KJkRgZu3sITJ8vbjFPQ/pub?gid=1230559235&single=true&output=csv';
-// Publish ratings_history tab as CSV and paste its URL:
 const HISTORY_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTzZ8pqSrYJRNpDro_Q58j2UWdN5eoE5gmBYc6apOnhWGheevdM0HTD3P8Q1KJkRgZu3sITJ8vbjFPQ/pub?gid=965035176&single=true&output=csv';
-// Publish popup_history tab as CSV and paste its URL:
 const POPUP_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTzZ8pqSrYJRNpDro_Q58j2UWdN5eoE5gmBYc6apOnhWGheevdM0HTD3P8Q1KJkRgZu3sITJ8vbjFPQ/pub?gid=664436898&single=true&output=csv';
+const PUBLIC_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTzZ8pqSrYJRNpDro_Q58j2UWdN5eoE5gmBYc6apOnhWGheevdM0HTD3P8Q1KJkRgZu3sITJ8vbjFPQ/pub?output=csv';
 const APP_LINK = 'https://play.google.com/store/apps/details?id=com.iqoption';
 
 const NAME2CODE = {"Algeria":"DZ","Andorra":"AD","Angola":"AO","Anguilla":"AI","Argentina":"AR","Austria":"AT","Azerbaijan":"AZ","Bahamas":"BS","Bahrain":"BH","Bangladesh":"BD","Belize":"BZ","Bolivia":"BO","Botswana":"BW","Brazil":"BR","Burkina Faso":"BF","Cambodia":"KH","Cameroon":"CM","Chile":"CL","Colombia":"CO","Costa Rica":"CR","Democratic Republic of the Congo":"CD","Dominica":"DM","Dominican Republic":"DO","Ecuador":"EC","Egypt":"EG","El Salvador":"SV","Fiji":"FJ","France":"FR","Germany":"DE","Ghana":"GH","Guatemala":"GT","Honduras":"HN","Hong Kong":"HK","Iceland":"IS","India":"IN","Indonesia":"ID","Italy":"IT","Ivory Coast":"CI","Jamaica":"JM","Jersey":"JE","Kuwait":"KW","Laos":"LA","Lebanon":"LB","Lesotho":"LS","Madagascar":"MG","Malaysia":"MY","Mauritius":"MU","Mexico":"MX","Morocco":"MA","Mozambique":"MZ","Namibia":"NA","Nepal":"NP","Netherlands":"NL","Nicaragua":"NI","Niger":"NE","Nigeria":"NG","Oman":"OM","Pakistan":"PK","Panama":"PA","Papua New Guinea":"PG","Paraguay":"PY","Peru":"PE","Philippines":"PH","Poland":"PL","Portugal":"PT","Qatar":"QA","Romania":"RO","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Seychelles":"SC","Singapore":"SG","Somalia":"SO","South Africa":"ZA","South Korea":"KR","Spain":"ES","Sri Lanka":"LK","Tanzania":"TZ","Thailand":"TH","Togo":"TG","Turkey":"TR","Turks and Caicos Islands":"TC","Uganda":"UG","Ukraine":"UA","United Arab Emirates":"AE","Uruguay":"UY","Venezuela":"VE","Vietnam":"VN","Zimbabwe":"ZW"};
@@ -215,16 +220,15 @@ function cname(cc){ if(cc==='ZZ')return 'Unknown / Other'; try{return REGION.of(
 function color(v){ if(v==null)return 'var(--ink-faint)'; if(v<THRESHOLD)return 'var(--alert)'; if(v<4.5)return 'var(--warn)'; return 'var(--ok)'; }
 function splitCsvLine(line){ const o=[];let f='',q=false; for(let i=0;i<line.length;i++){const c=line[i];
   if(q){if(c==='"'){if(line[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;} else{if(c==='"')q=true;else if(c===','){o.push(f);f='';}else f+=c;}} o.push(f);return o; }
-/* Safe integer parse: rejects date-like strings (e.g. "1900-05-14" from Sheets
-   coercing a count into a date) so a formatting slip can't inflate a number. */
 function safeInt(v){ if(v==null) return 0; const s=String(v).trim();
-  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return 0;   // looks like a date, not a count
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return 0;
   const n=parseInt(s.replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; }
 
 /* State */
-let LATEST=[];               // latest snapshot rows {country,total,daily,installs,date}
+let LATEST=[];               // latest snapshot rows
 let HISTORY={};              // { 'YYYY-Www': { CC: {total,installs} } }
 let POPUP={};                // { 'YYYY-MM': { CC: redirects } }
+let PUBLIC_RATINGS={};       // { CC: public_rating }
 let periods=[];              // sorted history week keys
 let current='below', query='', minVol=250, compare=false, selPeriod='latest';
 
@@ -234,9 +238,15 @@ async function load(){
   document.getElementById('asof').textContent='loading…';
   try{
     LATEST=parseCache(await fetchText(CACHE_URL));
-    await Promise.all([loadHistory(), loadPopup()]);
+    await Promise.all([loadHistory(), loadPopup(), loadPublicRatings()]);
     buildPeriodDropdown();
     mergePopupInto(LATEST,'latest');
+    
+    // Attach public ratings to LATEST
+    LATEST.forEach(d => {
+      d.publicRating = PUBLIC_RATINGS[d.country] != null ? PUBLIC_RATINGS[d.country] : null;
+    });
+
     const dates=LATEST.map(d=>d.date).filter(Boolean).sort();
     document.getElementById('asof').innerHTML=
       `com.iqoption · latest as of ${dates[dates.length-1]||'—'} <span class="refresh" onclick="load()">↻ refresh</span>`;
@@ -253,7 +263,6 @@ function parseCache(txt){
       installs:safeInt(c[4]),date:c[5],redirects:0};}).filter(d=>d.country);
 }
 
-/* ratings_history: ISO Week,Country,Total Average Rating,Monthly New Installs,As Of Date,Recorded At */
 async function loadHistory(){
   if(!HISTORY_URL||HISTORY_URL.indexOf('PASTE_')===0) return;
   try{
@@ -267,7 +276,6 @@ async function loadHistory(){
   }catch(e){}
 }
 
-/* popup_history: event_date,brand_name,country_name,platform_type,users_redirected_to_store */
 async function loadPopup(){
   if(!POPUP_URL||POPUP_URL.indexOf('PASTE_')===0) return;
   try{
@@ -279,8 +287,21 @@ async function loadPopup(){
     for(let r=1;r<rows.length;r++){const row=rows[r]; if(!row||row.length<=iN)continue;
       if(row[ib]!=='IQ Option'||(row[ip]||'').toLowerCase()!=='android')continue;
       const code=NAME2CODE[row[icn]]; if(!code)continue;
-      const mo=(row[id]||'').slice(0,7); if(!mo)continue;           // YYYY-MM
+      const mo=(row[id]||'').slice(0,7); if(!mo)continue;
       (POPUP[mo]=POPUP[mo]||{})[code]=(POPUP[mo][code]||0)+(parseInt(row[iN],10)||0);}
+  }catch(e){}
+}
+
+async function loadPublicRatings(){
+  if(!PUBLIC_URL) return;
+  try{
+    const rows=(await fetchText(PUBLIC_URL)).trim().split(/\r?\n/).map(splitCsvLine);
+    for(let r=1;r<rows.length;r++){
+      const row=rows[r]; if(!row||row.length<3)continue;
+      const cc=(row[0]||'').trim().toUpperCase();
+      const rating=parseFloat(row[2]);
+      if(cc && !isNaN(rating)){ PUBLIC_RATINGS[cc]=rating; }
+    }
   }catch(e){}
 }
 
@@ -291,17 +312,16 @@ function buildPeriodDropdown(){
     periods.slice().reverse().map(w=>`<option value="${w}">${w}</option>`).join('');
 }
 
-/* Build the working dataset for the selected period. */
 function datasetFor(period){
   if(period==='latest'||!HISTORY[period]){
     return LATEST.map(d=>({...d}));
   }
   const snap=HISTORY[period];
   return Object.keys(snap).map(cc=>({country:cc,total:isNaN(snap[cc].total)?null:snap[cc].total,
-    installs:snap[cc].installs,date:period,redirects:0,daily:0}));
+    installs:snap[cc].installs,date:period,redirects:0,daily:0,
+    publicRating:PUBLIC_RATINGS[cc]!=null?PUBLIC_RATINGS[cc]:null}));
 }
 
-/* attach popup redirects: for latest use most recent popup month; for a week, use that week's month. */
 function mergePopupInto(rows,period){
   let mo;
   if(period==='latest'){ const ms=Object.keys(POPUP).sort(); mo=ms[ms.length-1]; }
@@ -310,20 +330,26 @@ function mergePopupInto(rows,period){
   rows.forEach(d=>{ d.redirects=p[d.country]||0; });
   return mo;
 }
-function weekToMonth(wk){ // 2026-W29 -> approximate YYYY-MM via Thursday of that week
+
+function weekToMonth(wk){
   const m=wk.match(/(\d{4})-W(\d{2})/); if(!m) return null;
   const y=+m[1],w=+m[2]; const simple=new Date(Date.UTC(y,0,1+(w-1)*7));
   const dow=simple.getUTCDay(); const thu=new Date(simple); thu.setUTCDate(simple.getUTCDate()-((dow+6)%7)+3);
   return thu.getUTCFullYear()+'-'+('0'+(thu.getUTCMonth()+1)).slice(-2);
 }
 
-/* previous period's rating map, for compare deltas */
 function prevRatingMap(period){
   let prevKey=null;
   if(period==='latest'){ prevKey=periods[periods.length-1]; }
   else { const i=periods.indexOf(period); prevKey=i>0?periods[i-1]:null; }
   if(!prevKey||!HISTORY[prevKey]) return {};
   const m={}; Object.keys(HISTORY[prevKey]).forEach(cc=>m[cc]=HISTORY[prevKey][cc].total); return m;
+}
+
+function calcCampaignTarget(installs){
+  const targetReviews = Math.round((installs || 0) * 0.03);
+  const emailsNeeded = Math.round(targetReviews / (0.01 * 0.8));
+  return { targetReviews, emailsNeeded };
 }
 
 function render(){
@@ -358,6 +384,12 @@ function render(){
 
 function rowHtml(d,prev){
   const below=d.total<THRESHOLD, c=color(d.total), pct=Math.max(4,(d.total/5)*100);
+  const pubVal = d.publicRating != null ? d.publicRating : d.total;
+  const pubC = color(pubVal);
+  const pubPct = Math.max(4, (pubVal/5)*100);
+
+  const { targetReviews, emailsNeeded } = calcCampaignTarget(d.installs);
+
   let deltaCell='<div class="delta flat">·</div>';
   if(compare && prev[d.country]!=null && !isNaN(prev[d.country])){
     const dv=d.total-prev[d.country];
@@ -365,16 +397,42 @@ function rowHtml(d,prev){
     const sign=dv>0?'+':'';
     deltaCell=`<div class="delta ${cls}">${sign}${dv.toFixed(2)}</div>`;
   }
+
+  let statusHtml = '';
+  if (below) {
+    statusHtml = `
+      <div class="status">
+        <span class="main-status"><span class="dot" style="background:var(--alert)"></span>Campaign needed</span>
+        <span class="sub-info">~${targetReviews.toLocaleString()} reviews (${emailsNeeded.toLocaleString()} emails)</span>
+      </div>`;
+  } else {
+    statusHtml = `
+      <div class="status">
+        <span class="main-status"><span class="dot" style="background:var(--ok)"></span>Within target</span>
+      </div>`;
+  }
+
   return `<div class="lrow ${below?'below':''}">
     <div class="idcell cc">${d.country}</div>
     <div class="cname">${cname(d.country)}</div>
-    <div class="rating-cell"><div class="spark"><i style="width:${pct}%;background:${c}"></i></div>
-      <div class="rating" style="color:${c}">${d.total.toFixed(2)}</div></div>
+    
+    <!-- GP Console Rating -->
+    <div class="rating-cell">
+      <div class="spark"><i style="width:${pct}%;background:${c}"></i></div>
+      <div class="rating" style="color:${c}">${d.total.toFixed(2)}</div>
+    </div>
+
+    <!-- AppFollow Public Rating -->
+    <div class="rating-cell">
+      <div class="spark"><i style="width:${pubPct}%;background:${pubC}"></i></div>
+      <div class="rating" style="color:${pubC}">${d.publicRating != null ? d.publicRating.toFixed(2) : '—'}</div>
+    </div>
+
     ${deltaCell}
     <div class="num">${d.installs?d.installs.toLocaleString():'—'}</div>
     <div class="num" style="color:${d.redirects>0?'var(--warn)':'var(--ink-faint)'}">${d.redirects?d.redirects.toLocaleString():'—'}</div>
-    <div class="status"><span class="dot" style="background:${c}"></span>${below?'Campaign needed':'Within target'}</div>
-    <button class="prep" onclick="openModal('${d.country}',${d.total},${d.installs||0})">Prepare campaign</button>
+    ${statusHtml}
+    <button class="prep" onclick="openModal('${d.country}',${d.total},${d.publicRating},${d.installs||0})">Prepare campaign</button>
   </div>`;
 }
 
@@ -390,11 +448,14 @@ document.getElementById('cmp').addEventListener('click',e=>{compare=!compare;
   e.currentTarget.classList.toggle('on',compare);render();});
 
 /* modal */
-let currentCountry=null,currentIds=[];
-function openModal(cc,rating,installs){
-  currentCountry=cc;currentIds=[];
+let currentCountry=null,currentIds=[],currentInstalls=0;
+function openModal(cc,rating,publicRating,installs){
+  currentCountry=cc;currentIds=[];currentInstalls=installs;
+  const pRatingText = publicRating != null ? publicRating.toFixed(2) : '—';
+  const { targetReviews, emailsNeeded } = calcCampaignTarget(installs);
+
   document.getElementById('mCountry').textContent=`${cname(cc)} (${cc})`;
-  document.getElementById('mMeta').textContent=`rating ${rating.toFixed(2)} · ${(installs||0).toLocaleString()} installs · ${rating<THRESHOLD?'below threshold':'within target'}`;
+  document.getElementById('mMeta').textContent=`GP rating ${rating.toFixed(2)} · Public ${pRatingText} · ${(installs||0).toLocaleString()} installs · Target: ~${targetReviews.toLocaleString()} reviews (${emailsNeeded.toLocaleString()} emails needed)`;
   document.getElementById('idcount').textContent='';
   const dp=document.getElementById('drop');dp.className='drop';dp.textContent='Drop CSV here or click to browse';
   document.getElementById('msg').textContent='Upload a CSV and fill the fields to generate the message…';
@@ -409,18 +470,24 @@ drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('hot'
 drop.addEventListener('dragleave',()=>drop.classList.remove('hot'));
 drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('hot');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
 fileInput.addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);});
+
 function handleFile(file){const rd=new FileReader();rd.onload=()=>{currentIds=extractIds(rd.result);
   drop.className='drop ok';drop.textContent=`✓ ${file.name}`;
-  document.getElementById('idcount').textContent=`${currentIds.length.toLocaleString()} user IDs detected`;
+  const { emailsNeeded } = calcCampaignTarget(currentInstalls);
+  document.getElementById('idcount').textContent=`${currentIds.length.toLocaleString()} user IDs detected (Recommended target list: ~${emailsNeeded.toLocaleString()} emails)`;
   document.getElementById('csvBtn').disabled=currentIds.length===0;buildMsg();};rd.readAsText(file);}
+
 function extractIds(text){const lines=text.trim().split(/\r?\n/);if(!lines.length)return[];
   const rows=lines.map(splitCsvLine);const ncol=rows[0].length;let bc=0,bs=-1;
-  for(let c=0;c<ncol;c++){let s=0;for(let r=1;r<Math.min(rows.length,50);r++){if((rows[r][c]||'').replace(/[^0-9]/g,'').length>=6)s++;}if(s>bs){bs=s;bc=c;}}
+  for(let c=0;c<ncol;c++){let s=0;for(let r=1;r<Math.min(rows.length,50);r++){if((rows[r][bc]||'').replace(/[^0-9]/g,'').length>=6)s++;}if(s>bs){bs=s;bc=c;}}
   const ids=[];for(let r=1;r<rows.length;r++){const v=(rows[r][bc]||'').replace(/[^0-9]/g,'');if(v.length>=6)ids.push(v);}
   const hh=(rows[0][bc]||'').replace(/[^0-9]/g,'');if(hh.length>=6)ids.unshift(hh);return[...new Set(ids)];}
+
 ['mSubmitter','mName','mStart','mDays','mBonus','mLangs'].forEach(id=>document.getElementById(id).addEventListener('input',buildMsg));
 function val(id){return document.getElementById(id).value.trim();}
+
 function buildMsg(){if(!currentIds.length)return;const cc=currentCountry,country=cname(cc);
+  const { targetReviews, emailsNeeded } = calcCampaignTarget(currentInstalls);
   const msg=`Hey @product-marketing submission from ${val('mSubmitter')}
 
 ${val('mName')}
@@ -430,6 +497,10 @@ Please email IQ Option users about getting a ${val('mBonus')} bonus for a review
 The campaign lasts for ${val('mDays')||'7'} days from ${val('mStart')||'[start]'}. The payment date is within 3 working days after the campaign finishes.
 After finishing the campaign, users with accepted and verified reviews get a promo code in the promo center. Please send a second email about that, noting the promo code is valid for one month.
 The list of IDs is provided in the attached CSV.
+
+Campaign Metric Targets
+- Estimated Target 5★ Reviews: ~${targetReviews.toLocaleString()}
+- Recommended Email Audience Size: ~${emailsNeeded.toLocaleString()}
 
 Brand
 IQ Option
@@ -449,8 +520,10 @@ Email
 Translations
 ${val('mLangs')}`;
   document.getElementById('msg').textContent=msg;document.getElementById('copyBtn').disabled=false;}
+
 function copyMsg(){navigator.clipboard.writeText(document.getElementById('msg').textContent).then(()=>{
   const b=document.getElementById('copyBtn'),t=b.textContent;b.textContent='✓ Copied';setTimeout(()=>b.textContent=t,1500);});}
+
 function downloadCsv(){const blob=new Blob([currentIds.join('\n')],{type:'text/csv'});const u=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=u;a.download=`campaign_${currentCountry}_userids.csv`;a.click();URL.revokeObjectURL(u);}
 
