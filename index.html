@@ -60,7 +60,7 @@
   .stat.alert .n{color:var(--alert)} .stat.ok .n{color:var(--ok)}
 
   .list{border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .lhead,.lrow{display:grid;grid-template-columns:40px 1fr 70px 70px 55px 85px 85px 150px 118px;align-items:center;gap:8px}
+  .lhead,.lrow{display:grid;grid-template-columns:40px 1fr 100px 55px 85px 85px 150px 118px;align-items:center;gap:8px}
   .lhead{padding:10px 14px;background:var(--panel-2);border-bottom:1px solid var(--line);
     font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
   .lrow{padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel);transition:background .12s}
@@ -156,8 +156,7 @@
   <div class="list">
     <div class="lhead">
       <div>Code</div><div>Country</div>
-      <div style="text-align:right">GP Rate</div>
-      <div style="text-align:right">Public</div>
+      <div style="text-align:right">Current rating</div>
       <div style="text-align:right">Δ</div>
       <div style="text-align:right">Installs</div>
       <div style="text-align:right">Redirects</div>
@@ -359,10 +358,15 @@ function render(){
 
   const rated=data.filter(d=>d.total!==null);
   const visible=rated.filter(d=>d.installs>=minVol);
-  const below=visible.filter(d=>d.total<THRESHOLD);
-  const ok=visible.filter(d=>d.total>=THRESHOLD);
+  
+  // Use public rating if available, fallback to GP rating for filter logic
+  const below=visible.filter(d=>{ const val = d.publicRating != null ? d.publicRating : d.total; return val<THRESHOLD; });
+  const ok=visible.filter(d=>{ const val = d.publicRating != null ? d.publicRating : d.total; return val>=THRESHOLD; });
+  
   const hidden=rated.length-visible.length;
-  const avg=visible.length?visible.reduce((s,d)=>s+d.total,0)/visible.length:0;
+  
+  // Calculate average using public ratings where available
+  const avg=visible.length?visible.reduce((s,d)=>{ const val = d.publicRating != null ? d.publicRating : d.total; return s+val; },0)/visible.length:0;
 
   document.getElementById('volhint').textContent=`${hidden} low-volume hidden`+(mo?` · popup ${mo}`:'');
   document.getElementById('stats').innerHTML=`
@@ -374,17 +378,23 @@ function render(){
   const q=query.toUpperCase();
   const match=d=>!q||d.country.includes(q)||cname(d.country).toUpperCase().includes(q);
   let list=visible.filter(match);
-  if(current==='below') list=list.filter(d=>d.total<THRESHOLD);
-  if(current==='ok') list=list.filter(d=>d.total>=THRESHOLD);
-  list.sort((a,b)=>a.total-b.total);
+  if(current==='below') list=list.filter(d=>{ const val = d.publicRating != null ? d.publicRating : d.total; return val<THRESHOLD; });
+  if(current==='ok') list=list.filter(d=>{ const val = d.publicRating != null ? d.publicRating : d.total; return val>=THRESHOLD; });
+  
+  // Sort by visible rating
+  list.sort((a,b)=>{
+    const valA = a.publicRating != null ? a.publicRating : a.total;
+    const valB = b.publicRating != null ? b.publicRating : b.total;
+    return valA - valB;
+  });
 
   document.getElementById('rows').innerHTML =
     list.length ? list.map(d=>rowHtml(d,prev)).join('') : '<div class="state">No countries match the current filters.</div>';
 }
 
 function rowHtml(d,prev){
-  const below=d.total<THRESHOLD, c=color(d.total), pct=Math.max(4,(d.total/5)*100);
   const pubVal = d.publicRating != null ? d.publicRating : d.total;
+  const below = pubVal < THRESHOLD;
   const pubC = color(pubVal);
   const pubPct = Math.max(4, (pubVal/5)*100);
 
@@ -416,13 +426,7 @@ function rowHtml(d,prev){
     <div class="idcell cc">${d.country}</div>
     <div class="cname">${cname(d.country)}</div>
     
-    <!-- GP Console Rating -->
-    <div class="rating-cell">
-      <div class="spark"><i style="width:${pct}%;background:${c}"></i></div>
-      <div class="rating" style="color:${c}">${d.total.toFixed(2)}</div>
-    </div>
-
-    <!-- AppFollow Public Rating -->
+    <!-- Current Rating (AppFollow Public) -->
     <div class="rating-cell">
       <div class="spark"><i style="width:${pubPct}%;background:${pubC}"></i></div>
       <div class="rating" style="color:${pubC}">${d.publicRating != null ? d.publicRating.toFixed(2) : '—'}</div>
@@ -432,7 +436,7 @@ function rowHtml(d,prev){
     <div class="num">${d.installs?d.installs.toLocaleString():'—'}</div>
     <div class="num" style="color:${d.redirects>0?'var(--warn)':'var(--ink-faint)'}">${d.redirects?d.redirects.toLocaleString():'—'}</div>
     ${statusHtml}
-    <button class="prep" onclick="openModal('${d.country}',${d.total},${d.publicRating},${d.installs||0})">Prepare campaign</button>
+    <button class="prep" onclick="openModal('${d.country}',${d.publicRating},${d.installs||0})">Prepare campaign</button>
   </div>`;
 }
 
@@ -449,13 +453,13 @@ document.getElementById('cmp').addEventListener('click',e=>{compare=!compare;
 
 /* modal */
 let currentCountry=null,currentIds=[],currentInstalls=0;
-function openModal(cc,rating,publicRating,installs){
+function openModal(cc,publicRating,installs){
   currentCountry=cc;currentIds=[];currentInstalls=installs;
   const pRatingText = publicRating != null ? publicRating.toFixed(2) : '—';
   const { targetReviews, emailsNeeded } = calcCampaignTarget(installs);
 
   document.getElementById('mCountry').textContent=`${cname(cc)} (${cc})`;
-  document.getElementById('mMeta').textContent=`GP rating ${rating.toFixed(2)} · Public ${pRatingText} · ${(installs||0).toLocaleString()} installs · Target: ~${targetReviews.toLocaleString()} reviews (${emailsNeeded.toLocaleString()} emails needed)`;
+  document.getElementById('mMeta').textContent=`Current rating ${pRatingText} · ${(installs||0).toLocaleString()} installs · Target: ~${targetReviews.toLocaleString()} reviews (${emailsNeeded.toLocaleString()} emails needed)`;
   document.getElementById('idcount').textContent='';
   const dp=document.getElementById('drop');dp.className='drop';dp.textContent='Drop CSV here or click to browse';
   document.getElementById('msg').textContent='Upload a CSV and fill the fields to generate the message…';
