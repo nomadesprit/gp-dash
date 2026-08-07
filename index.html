@@ -125,8 +125,135 @@
     body{padding:14px}
   }
 </style>
+
+<style id="orm-ds">
+/* ============ ORM UNIFIED DESIGN SYSTEM (dark / orange-neon) ============ */
+:root{
+  --orm-bg:#0e1116; --orm-bg2:#0a0d12;
+  --orm-panel:#161b22; --orm-panel2:#1c232d; --orm-panel3:#232c38;
+  --orm-line:#2a323d; --orm-line2:#37424f;
+  --orm-ink:#e6edf3; --orm-ink-dim:#8b98a5; --orm-ink-faint:#5a6675;
+  --orm-accent:#ff8c2b; --orm-accent2:#ffb454; --orm-accent-glow:rgba(255,140,43,.45);
+  --orm-blue:#4c8dff; --orm-pos:#2ea043; --orm-neu:#c9a227; --orm-neg:#e5484d;
+  --orm-grad:linear-gradient(135deg,#ff8c2b,#ffb454);
+  --orm-glow:0 0 0 1px rgba(255,140,43,.22), 0 0 22px -6px var(--orm-accent-glow);
+  --orm-mx:78%; --orm-my:8%;   /* pointer position, updated on mousemove */
+  --orm-page:radial-gradient(1200px 600px at 82% -12%, rgba(255,140,43,.10), transparent 60%),
+             radial-gradient(900px 520px at -5% 0%, rgba(76,141,255,.06), transparent 55%),
+             var(--orm-bg);
+}
+html,body{background:var(--orm-bg)!important;color:var(--orm-ink)!important;}
+body{background:var(--orm-bg)!important;-webkit-font-smoothing:antialiased;}
+/* Pointer-reactive ambient glow — sits BEHIND all content (z-index:-1).
+   Large, soft radii so it reads as subtle depth, not a feature.
+   Panels are lifted to semi-transparent (below) so this shows through. */
+body::before{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(1600px 1400px at var(--orm-mx) var(--orm-my), rgba(255,140,43,.16), transparent 60%),
+    radial-gradient(1900px 1600px at calc(100% - var(--orm-mx)) calc(100% - var(--orm-my)), rgba(76,141,255,.08), transparent 60%),
+    var(--orm-bg);
+}
+
+/* Fancy scrollbar everywhere */
+*::-webkit-scrollbar{width:8px;height:8px;}
+*::-webkit-scrollbar-track{background:transparent;}
+*::-webkit-scrollbar-thumb{background:linear-gradient(var(--orm-accent),var(--orm-accent2));border-radius:6px;border:2px solid var(--orm-bg);}
+*::-webkit-scrollbar-thumb:hover{background:var(--orm-accent2);}
+
+/* ---- TOP BARS: force dark so light-on-dark text stays readable ---- */
+.topbar, header.topbar, .top-bar, .appbar, .masthead{
+  background:rgba(10,13,18,.92)!important;
+  border-bottom:1px solid var(--orm-line)!important;
+  backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px)!important;
+  box-shadow:0 2px 18px rgba(0,0,0,.45)!important;
+}
+
+/* ---- Slight panel translucency so the ambient background shows through ---- */
+[class*="card"],[class*="panel"],[class*="tile"],[class*="box"]{
+  background-color:rgba(22,27,34,.82)!important;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+}
+
+/* ---- HOME BUTTON ---- */
+.orm-home{position:fixed;top:16px;left:18px;z-index:9000;display:inline-flex;align-items:center;gap:8px;
+  background:var(--orm-grad);color:#0a0d12;font-weight:800;font-size:13px;letter-spacing:.02em;
+  font-family:inherit;border:0;border-radius:12px;padding:10px 15px;cursor:pointer;text-decoration:none;
+  box-shadow:0 10px 26px -8px var(--orm-accent-glow),0 0 0 1px rgba(255,140,43,.35);
+  transition:transform .15s ease, box-shadow .15s ease;}
+.orm-home:hover{transform:translateY(-2px);box-shadow:0 14px 32px -8px var(--orm-accent-glow),0 0 0 1px rgba(255,140,43,.6);text-decoration:none;}
+/* Inline variant: sits inside an existing top bar as its first item */
+.orm-home-inline{position:static!important;margin-right:16px;align-self:center;flex-shrink:0;padding:8px 14px;}
+.orm-home svg{width:15px;height:15px;display:block;}
+@media print{.orm-home{display:none!important;}}
+
+/* ---- SKELETON LOADER ---- */
+.orm-skel-wrap{position:fixed;inset:0;z-index:9998;background:var(--orm-page);
+  display:flex;flex-direction:column;gap:16px;padding:34px;transition:opacity .55s ease;}
+.orm-skel-wrap.hide{opacity:0;pointer-events:none;}
+.orm-skel-top{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+.orm-skel-logo{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--orm-accent);font-weight:800;}
+.orm-skel-bar{margin-left:auto;font-family:ui-monospace,'SF Mono',monospace;font-size:11px;color:var(--orm-ink-faint);}
+.orm-skel-wrap .skel{background:linear-gradient(100deg,var(--orm-panel) 30%,var(--orm-panel2) 50%,var(--orm-panel) 70%);
+  background-size:200% 100%;animation:ormskel 1.3s ease-in-out infinite;border-radius:14px;border:1px solid var(--orm-line);}
+@keyframes ormskel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.orm-skel-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.orm-skel-kpis .skel{height:100px;}
+.orm-skel-row{display:grid;grid-template-columns:2fr 1fr;gap:14px;}
+.orm-skel-row .skel{height:250px;}
+.orm-skel-list .skel{height:50px;margin-bottom:10px;}
+.orm-skel-status{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:auto;
+  font-family:ui-monospace,'SF Mono',monospace;font-size:12px;color:var(--orm-ink-dim);}
+.orm-skel-dot{width:9px;height:9px;border-radius:50%;background:var(--orm-accent);
+  box-shadow:0 0 14px var(--orm-accent);animation:ormpulse 1s ease-in-out infinite;flex-shrink:0;}
+@keyframes ormpulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.18)}}
+@media(max-width:820px){.orm-skel-kpis{grid-template-columns:1fr 1fr}.orm-skel-row{grid-template-columns:1fr}}
+
+
+:root{
+  --bg:#0e1116!important; --panel:rgba(22,27,34,.82)!important; --panel-2:rgba(28,35,45,.82)!important;
+  --line:#2a323d!important;
+}
+body{background:var(--orm-page)!important;}
+.card,.panel{box-shadow:var(--orm-glow)!important;}
+
+</style>
+
 </head>
 <body>
+
+<div class="orm-skel-wrap" id="orm-skel">
+  <div class="orm-skel-top">
+    <span class="orm-skel-dot"></span>
+    <span class="orm-skel-logo">GOOGLE PLAY · RATINGS</span>
+    <span class="orm-skel-bar">initializing live data stream…</span>
+  </div>
+  <div class="orm-skel-kpis">
+    <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
+  </div>
+  <div class="orm-skel-row">
+    <div class="skel"></div><div class="skel"></div>
+  </div>
+  <div class="orm-skel-list">
+    <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
+  </div>
+  <div class="orm-skel-status"><span class="orm-skel-dot"></span> Fetching &amp; rendering…</div>
+</div>
+<script>
+(function(){
+  function hide(){
+    var s = document.getElementById('orm-skel');
+    if (!s) return;
+    s.classList.add('hide');
+    setTimeout(function(){ if (s && s.parentNode) s.style.display='none'; }, 600);
+  }
+  // Hide once the real dashboard is up. Most dashboards flip their own loader
+  // on window 'load'; we mirror that, with a safety timeout.
+  window.addEventListener('load', function(){ setTimeout(hide, 400); });
+  setTimeout(hide, 9000); // safety net so we never trap the user
+})();
+</script>
+
 <div class="wrap">
   <header class="top">
     <div class="title"><b>ORM Ratings Console</b> &nbsp;·&nbsp; Google Play</div>
@@ -553,5 +680,87 @@ function downloadCsv(){const blob=new Blob([currentIds.join('\n')],{type:'text/c
 
 load();
 </script>
+
+<script>
+/* ORM-DS shared behaviours — purely additive, no dashboard logic touched */
+(function(){
+  // ---- Click sound: sleek, short "tick" (WebAudio, no asset) ----
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var ctx = null, muted = false;
+  try { muted = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  function click(){
+    if (muted || !AC) return;
+    try {
+      if (!ctx) ctx = new AC();
+      if (ctx.state === 'suspended') ctx.resume();
+      var t = ctx.currentTime;
+      // Short filtered noise burst = crisp mechanical "tick"
+      var dur = 0.028;
+      var buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+      var data = buf.getChannelData(0);
+      for (var i = 0; i < data.length; i++){
+        // decaying noise
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2.5);
+      }
+      var src = ctx.createBufferSource(); src.buffer = buf;
+      var bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = 2600; bp.Q.value = 0.9;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.14, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+      src.start(t); src.stop(t + dur);
+    } catch(e){}
+  }
+  // Only fire on genuine interactive controls — not on any random click.
+  var CLICK_SEL = 'button, a[href], .orm-home, [role="button"], .brand-tab, .nav-tab, '
+    + '.refresh-btn, .month-selector, .month-selector select, .toggle, .seg button, '
+    + 'input[type="button"], input[type="submit"], select, summary';
+  document.addEventListener('click', function(ev){
+    var el = ev.target.closest(CLICK_SEL);
+    if (el) click();
+  }, true);
+
+  // ---- Home button ----
+  function makeHomeEl(inline){
+    var a = document.createElement('a');
+    a.className = inline ? 'orm-home orm-home-inline' : 'orm-home';
+    a.href = 'https://orm-dashboard-api.david-lima-9cb.workers.dev/';
+    a.setAttribute('title','Back to ORM Command home');
+    a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg><span>Home</span>';
+    return a;
+  }
+  function addHome(){
+    if (document.querySelector('.orm-home')) return;
+    // Prefer sitting inside an existing top bar (first child) so it never
+    // overlaps existing controls and lands in a consistent top position.
+    var bar = document.querySelector('.topbar, header.topbar, .top-bar, .appbar, .masthead');
+    if (bar){
+      bar.insertBefore(makeHomeEl(true), bar.firstChild);
+    } else {
+      document.body.appendChild(makeHomeEl(false));
+    }
+  }
+  if (document.body) addHome(); else document.addEventListener('DOMContentLoaded', addHome);
+
+  // ---- Dynamic gradient: follows the pointer, subtly ----
+  var reduce = false;
+  try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  if (!reduce){
+    var root = document.documentElement, tx = 50, ty = 0, raf = 0;
+    function apply(){
+      root.style.setProperty('--orm-mx', tx.toFixed(1) + '%');
+      root.style.setProperty('--orm-my', ty.toFixed(1) + '%');
+      raf = 0;
+    }
+    window.addEventListener('pointermove', function(e){
+      tx = (e.clientX / window.innerWidth) * 100;
+      ty = (e.clientY / window.innerHeight) * 100;
+      if (!raf) raf = requestAnimationFrame(apply);
+    }, { passive: true });
+  }
+})();
+</script>
+
 </body>
 </html>
