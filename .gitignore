@@ -1,0 +1,9 @@
+.dev.vars
+.env
+.DS_Store
+.wrangler/
+.env.*
+*.service-account.json
+*credentials*.json
+js/data/*
+!js/data/fixture.js

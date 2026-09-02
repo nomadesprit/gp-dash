@@ -1,0 +1,4 @@
+country,email,user_id,segment
+BR,alpha@example.test,98124567,core
+BR,beta@example.test,98124568,side
+BR,gamma@example.test,98124567,core
