@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { loadDashboardData } from './source-loader.js';
 import { recordAtPeriod } from './adapters/appfollow.js';
 import { extractUserIds } from './adapters/csv.js';
-import { isTestCampaign } from './adapters/campaigns.js';
+import { isReservedCampaignId, isTestCampaign, suggestCampaignId } from './adapters/campaigns.js';
 import { applyMinimumWeeklyDownloads } from './adapters/volume.js';
 import { toCsv } from './campaign-files.js';
 import { countryName } from './normalization.js';
@@ -535,9 +535,18 @@ function bindEvents() {
   $('#new-campaign').addEventListener('click', openCampaignDialog);
   $('#close-campaign').addEventListener('click', () => $('#campaign-dialog').close());
   $('#user-id-file').addEventListener('change', handleUserIdFile);
-  $('#draft-id').addEventListener('input', clearCampaignResult);
+  $('#draft-id').addEventListener('input', () => { validateCampaignId(); clearCampaignResult(); });
   $('#draft-name').addEventListener('input', buildCampaignMessage);
-  $('#draft-country').addEventListener('change', buildCampaignMessage);
+  $('#draft-country').addEventListener('change', () => {
+    const idField = $('#draft-id');
+    if (idField.value === idField.dataset.suggestedId) {
+      idField.value = suggestedCampaignId();
+      idField.dataset.suggestedId = idField.value;
+    }
+    validateCampaignId();
+    clearCampaignResult();
+    buildCampaignMessage();
+  });
   $('#draft-start').addEventListener('input', buildCampaignMessage);
   $('#draft-end').addEventListener('input', buildCampaignMessage);
   $('#rotate-links').addEventListener('change', clearCampaignResult);
@@ -560,11 +569,9 @@ function openCampaignDialog() {
   $('#draft-brand').value = state.filters.brand;
   $('#draft-store').value = state.filters.store;
   if (!$('#draft-start').value) $('#draft-start').value = new Date().toISOString().slice(0, 10);
-  const campaignDate = ($('#draft-start').value || new Date().toISOString().slice(0, 10)).replaceAll('-', '');
-  const suggestedId = [state.filters.brand, state.filters.store, $('#draft-country').value, campaignDate]
-    .map(value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''))
-    .filter(Boolean).join('_').slice(0, 64);
-  $('#draft-id').value = suggestedId;
+  $('#draft-id').value = suggestedCampaignId();
+  $('#draft-id').dataset.suggestedId = $('#draft-id').value;
+  validateCampaignId();
   state.currentIds = [];
   state.currentUniqueIdCount = 0;
   state.preparedCampaign = null;
@@ -575,6 +582,18 @@ function openCampaignDialog() {
   clearCampaignResult('Upload the Metabase CSV to begin.');
   buildCampaignMessage();
   $('#campaign-dialog').showModal();
+}
+
+function suggestedCampaignId() {
+  const campaignDate = ($('#draft-start').value || new Date().toISOString().slice(0, 10)).replaceAll('-', '');
+  return suggestCampaignId(state.filters.brand, state.filters.store, $('#draft-country').value, campaignDate);
+}
+
+function validateCampaignId() {
+  const idField = $('#draft-id');
+  idField.setCustomValidity(isReservedCampaignId(idField.value)
+    ? 'Campaign ID cannot contain test or smoke as a separate word. Use a pilot ID, such as pilot_20260917.'
+    : '');
 }
 
 function buildCampaignMessage() {

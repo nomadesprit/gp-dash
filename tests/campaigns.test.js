@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isTestCampaign, normalizeCampaignRecords, parseCampaigns, summarizeScreenshotTracker } from '../js/adapters/campaigns.js';
+import { isReservedCampaignId, isTestCampaign, normalizeCampaignRecords, parseCampaigns, suggestCampaignId, summarizeScreenshotTracker } from '../js/adapters/campaigns.js';
+
+test('TEST country suggests a campaign ID accepted by the uploader', () => {
+  const id = suggestCampaignId('IQ Option', 'GooglePlay', 'TEST', '20260917');
+  assert.equal(id, 'pilot_20260917');
+  assert.equal(isReservedCampaignId(id), false);
+  assert.equal(isReservedCampaignId('iq_option_googleplay_test_20260917'), true);
+  assert.equal(isReservedCampaignId('pilot_smoke_20260917'), true);
+});
 
 test('TEST country is a separate campaign cohort, not an unmapped country', () => {
   const result = normalizeCampaignRecords([

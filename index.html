@@ -197,7 +197,7 @@
       </div>
       <p class="notice subtle">Eligibility and rewards must not depend on whether a user leaves a positive, negative, or any particular rating.</p>
       <div class="dialog-fields">
-        <label>Campaign ID <span class="field-help">Must match the uploader campaign key</span><input id="draft-id" required maxlength="64" pattern="[A-Za-z0-9_-]+"></label>
+        <label>Campaign ID <span class="field-help">For TEST country, use a pilot ID such as pilot_20260917. IDs with test or smoke as a separate word are reserved.</span><input id="draft-id" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]*"></label>
         <label>Campaign name<input id="draft-name" required value="Rating-neutral feedback campaign"></label>
         <label>Brand<input id="draft-brand" readonly></label>
         <label>Store<input id="draft-store" readonly></label>

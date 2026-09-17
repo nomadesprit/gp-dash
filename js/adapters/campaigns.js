@@ -36,7 +36,14 @@ export function normalizeCampaignRecords(rows = []) {
   return { records, unmapped: [...unmapped].sort() };
 }
 
-const isSmokeCampaignId = value => /(^|[_-])(test|smoke)([_-]|$)/i.test(String(value || ''));
+export const isReservedCampaignId = value => /(^|[_-])(test|smoke)([_-]|$)/i.test(String(value || ''));
+
+export function suggestCampaignId(brand, store, country, date) {
+  if (country === 'TEST') return `pilot_${date}`;
+  return [brand, store, country, date]
+    .map(value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''))
+    .filter(Boolean).join('_').slice(0, 64);
+}
 
 export function summarizeScreenshotTracker(participants = [], submissions = [], registry = []) {
   const campaigns = new Map();
@@ -71,7 +78,7 @@ export function summarizeScreenshotTracker(participants = [], submissions = [], 
   participants.forEach(row => {
     const campaignId = String(row.current_campaign_id || '').trim();
     if (!campaignId) { unassignedParticipants += 1; return; }
-    if (isSmokeCampaignId(campaignId)) { excludedTestParticipants += 1; return; }
+    if (isReservedCampaignId(campaignId)) { excludedTestParticipants += 1; return; }
     const campaign = getCampaign(campaignId);
     campaign.audience_size += 1;
   });
@@ -79,7 +86,7 @@ export function summarizeScreenshotTracker(participants = [], submissions = [], 
   submissions.forEach(row => {
     const campaignId = String(row.campaign_id || '').trim();
     if (!campaignId) { unassignedSubmissions += 1; return; }
-    if (isSmokeCampaignId(campaignId)) { excludedTestSubmissions += 1; return; }
+    if (isReservedCampaignId(campaignId)) { excludedTestSubmissions += 1; return; }
     const campaign = getCampaign(campaignId);
     const status = String(row.status || '').trim().toLowerCase();
     if (row.submitted_at) campaign.evidence_submissions += 1;
