@@ -2,6 +2,7 @@ import { CONFIG } from './config.js';
 import { loadDashboardData } from './source-loader.js';
 import { recordAtPeriod } from './adapters/appfollow.js';
 import { extractUserIds } from './adapters/csv.js';
+import { isTestCampaign } from './adapters/campaigns.js';
 import { applyMinimumWeeklyDownloads } from './adapters/volume.js';
 import { toCsv } from './campaign-files.js';
 import { countryName } from './normalization.js';
@@ -67,7 +68,7 @@ function initializeFilters() {
   $('#volume-filter').max = slider.max;
   $('#volume-filter').step = slider.step;
   $('#volume-filter').value = state.filters.minWeeklyDownloads;
-  fillSelect($('#draft-country'), countryCodes, state.selectedKey?.split('|').at(-1) || countryCodes[0], value => `${countryName(value)} (${value})`);
+  fillSelect($('#draft-country'), [...countryCodes, 'TEST'], state.selectedKey?.split('|').at(-1) || countryCodes[0], value => value === 'TEST' ? 'Test cohort (TEST)' : `${countryName(value)} (${value})`);
 }
 
 function baseScopedRecords() {
@@ -143,7 +144,7 @@ function renderOverview(records, scope) {
     { value: esc(sourcePeriod || '—'), label: 'Latest AppFollow period', meta: 'Rightmost non-empty weekly value' },
     { value: formatInt(popup.accepted), label: 'Popup store redirects', meta: Number(state.filters.minWeeklyDownloads) > 0 ? 'Volume-filtered joined samples' : 'Accepted ≠ verified store rating' },
     { value: formatRate(acceptedRate), label: 'Popup acceptance rate', meta: `${formatInt(popup.show)} users shown` },
-    { value: campaignConnected ? state.data.campaigns.filter(campaign => campaign.status === 'active').length : '—', label: 'Active campaigns', meta: campaignConnected ? 'Screenshot tracker connected' : 'Source unavailable in demo mode' },
+    { value: campaignConnected ? state.data.campaigns.filter(campaign => !isTestCampaign(campaign) && campaign.status === 'active').length : '—', label: 'Active campaigns', meta: campaignConnected ? 'Screenshot tracker connected' : 'Source unavailable in demo mode' },
     { value: popupStatus === 'stale' ? 'Popup stale' : 'Mismatch', label: 'Data freshness', meta: `Popup redirects through ${dailyThrough}`, attention: true },
   ];
   $('#kpi-grid').innerHTML = cards.map(card => `<article class="kpi ${card.attention ? 'attention' : ''}"><span class="label">${card.label}</span><span class="value">${card.value}</span><span class="meta">${card.meta}</span></article>`).join('');
@@ -362,7 +363,9 @@ function renderDetail(record) {
 }
 
 function renderCampaigns() {
-  const records = [...state.data.campaigns, ...state.drafts];
+  const allRecords = [...state.data.campaigns, ...state.drafts];
+  const records = allRecords.filter(campaign => !isTestCampaign(campaign));
+  const testRecords = allRecords.filter(isTestCampaign);
   const progress = records.map(campaign => ({ campaign, forecast: campaignProgress(campaign) }));
   const active = records.filter(campaign => campaign.status === 'active').length;
   const audience = sum(records, 'audience_size');
@@ -406,6 +409,30 @@ function renderCampaigns() {
       </article>`;
     }).join('');
   }
+  const testList = $('#test-campaign-list');
+  if (!testRecords.length) {
+    testList.className = 'empty';
+    testList.textContent = 'No internal test campaign yet. Choose Test cohort in Launch campaign to check the upload flow without adding a country rating row.';
+  } else {
+    testList.className = '';
+    testList.innerHTML = testRecords.map(campaign => {
+      const audience = Number(campaign.audience_size) || 0;
+      const submitted = Number(campaign.evidence_submissions) || 0;
+      const progressWidth = audience ? Math.max(0, Math.min(100, submitted / audience * 100)) : 0;
+      return `<article class="campaign-record">
+        <div class="panel-heading"><h3>${esc(campaign.name || campaign.campaign_id)}</h3><span class="badge neutral">Internal test · ${esc(campaign.status || 'tracked')}</span></div>
+        <p>${esc(campaign.start_date || 'No start')} → ${esc(campaign.end_date || 'No end')} · TEST country · upload evidence only</p>
+        <div class="campaign-metrics">
+          <div><strong>${formatInt(audience)}</strong><span>links prepared</span></div>
+          <div><strong>${formatInt(submitted)}</strong><span>screenshots sent</span></div>
+          <div><strong>${formatInt(campaign.pending_review)}</strong><span>pending checks</span></div>
+          <div><strong>${formatInt(campaign.approved)}</strong><span>evidence accepted</span></div>
+        </div>
+        <div class="campaign-progress-bar" role="img" aria-label="${formatRate(percentage(submitted, audience))} of the test cohort has uploaded"><i style="width:${progressWidth}%"></i></div>
+        <p class="explain">Shown in aggregate after the private tracker refreshes. No account IDs, screenshots, or rating values appear here.</p>
+      </article>`;
+    }).join('');
+  }
   const series = dailyRedirectSeries(scopedRecords());
   $('#redirect-source-period').textContent = `Through ${state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown'} · current filter scope`;
   if (!series.length) {
@@ -428,7 +455,8 @@ function renderQuality() {
   const sources = state.data.sourceMetadata || {};
   const dailyThrough = sources.popup?.dailyRedirectThrough || 'unknown';
   const downloadThrough = latestString(state.data.volumeRecords.map(row => row.asOfDate)) || 'unknown';
-  const registryRows = state.data.campaignTracker?.campaignRegistryRows || 0;
+  const registryRows = state.data.campaignTracker?.productionCampaignRegistryRows ?? state.data.campaignTracker?.campaignRegistryRows ?? 0;
+  const testRegistryRows = state.data.campaignTracker?.testCampaignRegistryRows || 0;
   const registryConnected = Boolean(state.data.campaignTracker?.registryConnected || sources.campaign?.registryConnected);
   const rawIqAndroid = state.data.popupRows.filter(row => row.brand === 'IQ Option' && row.store === 'GooglePlay').reduce((total, row) => total + row.show, 0);
   const pivotIqAndroid = state.data.popupHighLevelSummary.find(row => row.brand === 'IQ Option' && row.store === 'GooglePlay')?.show;
@@ -444,7 +472,7 @@ function renderQuality() {
     <div class="quality-item"><strong>Popup summary cross-check</strong>${popupCrossCheck} Scoped KPIs use raw rows for consistent country and volume filtering.</div>
     <div class="quality-item"><strong>Campaign source</strong>${state.data.mode === 'live-private-sheet-api' ? 'Live private tracker aggregates were refreshed' : 'Synthetic demo data is active'} ${esc(state.data.campaignTracker?.generatedAt || 'at an unknown time')}. Current smoke-test and unassigned rows are excluded; no production outcomes are invented.</div>
     <div class="quality-item"><strong>Campaign privacy</strong>No user IDs, token hashes, submission or claim IDs, Drive file IDs, screenshot URLs, images, or review notes are deployed. Screenshots remain in the private evidence store and are configured for ${formatInt(state.data.campaignTracker?.retentionDays || 90)}-day retention.</div>
-    <div class="quality-item"><strong>Campaign country join</strong>${registryConnected ? `The privacy-safe Campaigns registry is connected with ${formatInt(registryRows)} production row${registryRows === 1 ? '' : 's'}. Add one row keyed by the uploader campaign ID to activate country joins and pace forecasting.` : 'The fallback snapshot predates the Campaigns registry; live mode is required for current campaign joins.'}</div>
+    <div class="quality-item"><strong>Campaign country join</strong>${registryConnected ? `The privacy-safe Campaigns registry is connected with ${formatInt(registryRows)} production row${registryRows === 1 ? '' : 's'} and ${formatInt(testRegistryRows)} internal test row${testRegistryRows === 1 ? '' : 's'}. Test cohort rows are shown separately and do not affect country ratings or production campaign totals.` : 'The fallback snapshot predates the Campaigns registry; live mode is required for current campaign joins.'}</div>
     <div class="quality-item"><strong>Participation evidence</strong>An accepted screenshot proves only that the campaign verification step was accepted. It is not automatically a verified external-store rating and must not determine reward eligibility or rating value.</div>
     <div class="quality-item"><strong>Popup workbook coverage</strong>${meta ? `${formatInt(meta.rawRows)} raw snapshot rows, ${formatInt(meta.countryRateRows)} Rates-by-Country rows, ${formatInt(meta.dailyRedirectRows)} daily rows, and ${formatInt(meta.feedbackTicketRowsAggregated)} feedback tickets are represented.` : 'Popup snapshot metadata unavailable.'} Personal IDs and free-text feedback are not included.</div>
   </div>`;

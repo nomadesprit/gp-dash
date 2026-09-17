@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCampaigns, summarizeScreenshotTracker } from '../js/adapters/campaigns.js';
+import { isTestCampaign, normalizeCampaignRecords, parseCampaigns, summarizeScreenshotTracker } from '../js/adapters/campaigns.js';
+
+test('TEST country is a separate campaign cohort, not an unmapped country', () => {
+  const result = normalizeCampaignRecords([
+    { campaign_id: 'pilot_20260917', brand: 'IQ Option', store: 'GooglePlay', country: 'TEST' },
+    { campaign_id: 'br_sep', brand: 'IQ Option', store: 'GooglePlay', country: 'Brazil' },
+  ]);
+  assert.deepEqual(result.unmapped, []);
+  assert.equal(result.records[0].countryCode, 'TEST');
+  assert.equal(isTestCampaign(result.records[0]), true);
+  assert.equal(isTestCampaign(result.records[1]), false);
+});
 
 test('legacy Typeform count is accepted as an evidence-submission alias', () => {
   const csv = 'campaign_id,name,brand,store,country,status,start_date,end_date,audience_size,emails_sent,delivered,typeform_submissions,pending_review,approved,rejected,rewards_granted,verified_review_count,source_updated_at\nC1,Campaign,IQ Option,GooglePlay,Brazil,active,2026-08-01,2026-08-31,100,90,80,12,3,8,1,0,0,2026-08-12\n';

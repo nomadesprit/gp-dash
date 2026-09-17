@@ -46,6 +46,35 @@ test('server campaign aggregation joins the registry and keeps discontiguous tra
   for (const forbidden of ['user_id', 'token_hash', 'file_id', 'screenshot_url', 'review_notes']) assert.equal(serialized.includes(forbidden), false);
 });
 
+test('TEST country uploads are visible in aggregate while smoke campaigns stay excluded', () => {
+  const registryRows = [
+    ['campaign_id', 'name', 'brand', 'store', 'country', 'status'],
+    ['pilot_20260917', 'Internal pilot', 'IQ Option', 'GooglePlay', 'TEST', 'ready_for_mailing'],
+  ];
+  const result = summarizeCampaignTracker({
+    registryRows,
+    participantRanges: [
+      [['status', 'current_campaign_id'], ['eligible', 'pilot_20260917'], ['eligible', 'pilot_20260917'], ['blocked', 'automated_smoke_test']],
+      [['brand'], ['IQ Option'], ['IQ Option'], ['IQ Option']],
+    ],
+    submissionRanges: [
+      [['campaign_id'], ['pilot_20260917'], ['automated_smoke_test']],
+      [['status'], ['pending_verification'], ['pending_verification']],
+      [['selected_language'], ['en'], ['en']],
+      [['submitted_at', 'reviewed_at'], ['2026-09-17T12:00:00Z'], ['2026-09-17T12:00:00Z']],
+      [['retention_deleted_at'], [], []],
+    ],
+  });
+  assert.equal(result.campaigns.length, 1);
+  assert.equal(result.campaigns[0].is_test, true);
+  assert.equal(result.campaigns[0].audience_size, 2);
+  assert.equal(result.campaigns[0].evidence_submissions, 1);
+  assert.equal(result.campaigns[0].pending_review, 1);
+  assert.equal(result.metadata.productionCampaignRegistryRows, 0);
+  assert.equal(result.metadata.testCampaignRegistryRows, 1);
+  assert.equal(result.metadata.excludedTestSubmissions, 1);
+});
+
 test('freshness follows the documented Friday and monthly warning windows', () => {
   const now = new Date('2026-08-12T12:00:00Z');
   assert.equal(freshness('2026-08-07T12:00:00Z', 10, now).status, 'current');

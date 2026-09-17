@@ -177,6 +177,10 @@
         <div class="panel"><div class="panel-heading"><h3>Campaign records</h3><span>privacy-safe registry + tracker</span></div><div id="campaign-list" class="empty">No production campaign records.</div></div>
         <div class="panel"><div class="panel-heading"><h3>Daily store redirects</h3><span id="redirect-source-period">Source period loading…</span></div><div id="redirect-trend"></div><p class="explain">Redirect activity is traffic to the store. It does not establish that a store rating was submitted.</p></div>
       </div>
+      <div class="panel test-campaign-panel" aria-labelledby="test-campaign-heading">
+        <div class="panel-heading"><h3 id="test-campaign-heading">Test cohort</h3><span>upload flow only · excluded from production metrics</span></div>
+        <div id="test-campaign-list" class="empty">No internal test campaign yet.</div>
+      </div>
     </section>
 
     <section class="panel data-quality" id="quality" aria-labelledby="quality-heading">
@@ -197,7 +201,7 @@
         <label>Campaign name<input id="draft-name" required value="Rating-neutral feedback campaign"></label>
         <label>Brand<input id="draft-brand" readonly></label>
         <label>Store<input id="draft-store" readonly></label>
-        <label>Country<select id="draft-country" required></select></label>
+        <label>Country<select id="draft-country" required></select><span class="field-help">Choose Test cohort for an internal upload-flow pilot. Its submissions appear separately from country ratings and production campaign totals.</span></label>
         <label>Start date<input id="draft-start" type="date" required></label>
         <label>End date<input id="draft-end" type="date" required></label>
       </div>

@@ -6,6 +6,8 @@ const COUNT_FIELDS = [
   'pending_review', 'approved', 'rejected', 'rewards_granted', 'verified_review_count',
 ];
 
+export const isTestCampaign = campaign => campaign.countryCode === 'TEST' || campaign.is_test === true;
+
 export function parseCampaigns(csv, requiredSchema) {
   const rows = parseCsv(csv);
   if (!rows.length) return { records: [], errors: [], unmapped: [] };
@@ -34,7 +36,7 @@ export function normalizeCampaignRecords(rows = []) {
   return { records, unmapped: [...unmapped].sort() };
 }
 
-const isTestCampaign = value => /(^|[_-])(test|smoke)([_-]|$)/i.test(String(value || ''));
+const isSmokeCampaignId = value => /(^|[_-])(test|smoke)([_-]|$)/i.test(String(value || ''));
 
 export function summarizeScreenshotTracker(participants = [], submissions = [], registry = []) {
   const campaigns = new Map();
@@ -69,7 +71,7 @@ export function summarizeScreenshotTracker(participants = [], submissions = [], 
   participants.forEach(row => {
     const campaignId = String(row.current_campaign_id || '').trim();
     if (!campaignId) { unassignedParticipants += 1; return; }
-    if (isTestCampaign(campaignId)) { excludedTestParticipants += 1; return; }
+    if (isSmokeCampaignId(campaignId)) { excludedTestParticipants += 1; return; }
     const campaign = getCampaign(campaignId);
     campaign.audience_size += 1;
   });
@@ -77,7 +79,7 @@ export function summarizeScreenshotTracker(participants = [], submissions = [], 
   submissions.forEach(row => {
     const campaignId = String(row.campaign_id || '').trim();
     if (!campaignId) { unassignedSubmissions += 1; return; }
-    if (isTestCampaign(campaignId)) { excludedTestSubmissions += 1; return; }
+    if (isSmokeCampaignId(campaignId)) { excludedTestSubmissions += 1; return; }
     const campaign = getCampaign(campaignId);
     const status = String(row.status || '').trim().toLowerCase();
     if (row.submitted_at) campaign.evidence_submissions += 1;

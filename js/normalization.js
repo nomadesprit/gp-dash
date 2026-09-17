@@ -44,6 +44,7 @@ const DISPLAY = new Intl.DisplayNames(['en'], { type: 'region' });
 
 export function normalizeCountry(value, unmapped = null) {
   const raw = String(value ?? '').trim();
+  if (raw.toUpperCase() === 'TEST') return 'TEST';
   if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
   const code = COUNTRY_CODES.get(raw);
   if (!code && raw && unmapped) unmapped.add(raw);
@@ -52,6 +53,7 @@ export function normalizeCountry(value, unmapped = null) {
 
 export function countryName(code) {
   if (!code) return 'Unmapped country';
+  if (code === 'TEST') return 'Test cohort';
   try { return DISPLAY.of(code) || code; } catch { return code; }
 }
 

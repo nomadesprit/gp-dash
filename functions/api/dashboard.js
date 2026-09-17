@@ -6,7 +6,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets.readonly',
   'https://www.googleapis.com/auth/drive.metadata.readonly',
 ].join(' ');
-const CACHE_VERSION = 'evidence-dates-v2';
+const CACHE_VERSION = 'test-cohort-v1';
 const ALLOWED_HOSTS = new Set(['gp-dash.pages.dev', 'localhost', '127.0.0.1']);
 
 function base64Url(value) {

@@ -107,6 +107,17 @@ enough to download the files and are never included in the dashboard API.
 Eligibility and rewards remain independent of whether a rating is left and of
 its value.
 
+For an internal upload-flow pilot, choose **Test cohort (TEST)** as the campaign
+country and use a normal campaign ID without the reserved `test` or `smoke`
+segments (for example, `pilot_20260917`). The uploader still issues the same
+personal secure links and writes to the private tracker. The dashboard shows
+aggregate link, submission, pending, and accepted counts in a separate Test
+cohort panel. TEST has no AppFollow rating row and is excluded from production
+campaign totals and rating forecasts. Existing smoke-test campaign IDs remain
+excluded. Preparing a pilot uses real account IDs and the uploader's global
+participation checks, so accounts with pending or successful submissions may
+be ineligible for later campaigns until the tracker is reviewed.
+
 Campaign pace forecasting activates only when audience, valid dates, and observed submissions exist. It predicts screenshot-evidence completion at observed pace; it never infers external-store ratings.
 
 ## Forecast contract and remaining production gap
