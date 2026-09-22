@@ -517,7 +517,7 @@ function renderReviews() {
   status.className = `campaign-prepare-status${state.reviews.message ? ' success' : ''}`;
   status.textContent = state.reviews.message || (campaign
     ? campaign.pending > 0
-      ? `${formatInt(campaign.pending)} submission${campaign.pending === 1 ? '' : 's'} still need review. The reward CSV unlocks when the pending count reaches zero.`
+      ? `${formatInt(campaign.pending)} submission${campaign.pending === 1 ? '' : 's'} still need${campaign.pending === 1 ? 's' : ''} review. The reward CSV unlocks when the pending count reaches zero.`
       : campaign.approved > 0
         ? 'Review is complete. The approved USERID CSV is ready to download.'
         : 'Review is complete. No users were approved for a reward.'
