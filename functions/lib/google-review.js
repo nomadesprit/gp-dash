@@ -3,6 +3,7 @@ const REVIEW_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.readonly',
 ].join(' ');
+export const GOOGLE_JWT_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
 
 function base64Url(value) {
   const bytes = typeof value === 'string' ? encoder.encode(value) : new Uint8Array(value);
@@ -42,7 +43,7 @@ export async function reviewAccessToken(secret) {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth2:grant-type:jwt-bearer',
+      grant_type: GOOGLE_JWT_GRANT_TYPE,
       assertion: `${signingInput}.${base64Url(signature)}`,
     }),
     signal: AbortSignal.timeout(15_000),
