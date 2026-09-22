@@ -13,7 +13,7 @@ npm run serve
 
 Open `http://localhost:4173`. A plain static server cannot execute the Pages Function, so the browser visibly falls back to a small synthetic demo fixture. Every demo value is invented test data and is labeled as such; no workbook-derived fallback payload is committed.
 
-The automated suite currently has 37 tests covering:
+The automated suite currently has 47 tests covering:
 
 - rightmost AppFollow weekly values and cross-month history;
 - period, country, threshold, volume, and ISO-normalization calculations;
@@ -96,6 +96,22 @@ Tracker mappings are conservative:
 - `blocked`/`rejected` → blocked or rejected evidence;
 - `retention_deleted_at` → retention deletion recorded.
 
+The Access-protected **Screenshot review & reward eligibility** queue reads pending
+submissions directly from the private tracker and streams each screenshot through
+a same-origin Pages Function. Raw Drive file IDs and URLs are never sent to browser
+JavaScript. An approval writes `successful` to both the submission and the current
+participant, records `reward_eligible=yes`, the review timestamp, notes, and the
+Cloudflare Access reviewer identity, and permanently excludes that participant
+from later campaign preparation. A rejection writes `rejected` and
+`reward_eligible=no` to both records, leaving the active link retryable until its
+expiry. The submission row, participant row, and campaign counters are written
+in one Sheets batch request.
+
+Approved-user export is campaign scoped. The download remains unavailable while
+that campaign has `pending_verification` submissions and contains only one
+`USERID` column with approved IDs. Reward processing remains an internal operation;
+the dashboard does not grant or send rewards.
+
 The Access-protected **Launch Campaign** dialog accepts a Metabase USERID CSV,
 detects the ID column, and sends the rows to a same-origin Pages Function only
 after the operator confirms preparation. The Function calls the uploader's
@@ -112,7 +128,8 @@ country and use a normal campaign ID without the reserved `test` or `smoke`
 segments (for example, `pilot_20260917`). The uploader still issues the same
 personal secure links and writes to the private tracker. The dashboard shows
 aggregate link, submission, pending, and accepted counts in a separate Test
-cohort panel. TEST has no AppFollow rating row and is excluded from production
+cohort panel and exposes its pending screenshots only inside the Access-protected
+review queue. TEST has no AppFollow rating row and is excluded from production
 campaign totals and rating forecasts. Existing smoke-test campaign IDs remain
 excluded. Preparing a pilot uses real account IDs and the uploader's global
 participation checks, so accounts with pending or successful submissions may

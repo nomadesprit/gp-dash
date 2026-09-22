@@ -21,6 +21,7 @@
         <a href="#countries">Countries</a>
         <a href="#forecast">Forecast</a>
         <a href="#campaigns">Campaigns</a>
+        <a href="#reviews">Review</a>
         <a href="#quality">Data quality</a>
       </nav>
       <div class="topbar-actions">
@@ -183,8 +184,30 @@
       </div>
     </section>
 
+    <section id="reviews" aria-labelledby="reviews-heading">
+      <div class="section-heading">
+        <div><p class="kicker">06 · Evidence review</p><h2 id="reviews-heading">Screenshot review &amp; reward eligibility</h2></div>
+        <div class="review-heading-actions">
+          <button class="secondary-button" type="button" id="refresh-reviews">Refresh queue</button>
+          <button class="primary-button" type="button" id="download-approved" disabled>Download approved USERID CSV</button>
+        </div>
+      </div>
+      <div class="panel review-panel">
+        <div class="review-toolbar">
+          <label>Campaign<select id="review-campaign"><option value="">Loading review queue…</option></select></label>
+          <div class="review-guidance">
+            <strong>Approval is the reward decision.</strong>
+            <span>Approved users are permanently blocked from future campaigns. Rejected users can upload again while their link remains valid.</span>
+          </div>
+        </div>
+        <div class="campaign-progress-summary review-summary" id="review-summary" aria-live="polite"></div>
+        <div class="campaign-prepare-status" id="review-status" role="status">Loading protected review queue…</div>
+        <div id="review-queue" class="review-queue"></div>
+      </div>
+    </section>
+
     <section class="panel data-quality" id="quality" aria-labelledby="quality-heading">
-      <div class="section-heading compact"><div><p class="kicker">06 · Data quality</p><h2 id="quality-heading">Join, freshness &amp; source checks</h2></div></div>
+      <div class="section-heading compact"><div><p class="kicker">07 · Data quality</p><h2 id="quality-heading">Join, freshness &amp; source checks</h2></div></div>
       <div id="quality-list"></div>
     </section>
   </main>
