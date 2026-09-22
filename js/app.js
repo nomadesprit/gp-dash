@@ -529,7 +529,7 @@ function renderReviews() {
   }
   queue.innerHTML = selectedItems.map((item, index) => {
     const busy = state.reviews.busyReviewId === item.reviewId;
-    return `<article class="review-card" data-review-card="${esc(item.reviewId)}">
+    return `<article class="review-card" data-review-card="${esc(item.reviewId)}" tabindex="0" aria-label="Review screenshot for user ${esc(item.userId)}. Press Right Arrow to approve or Left Arrow to reject.">
       <div class="review-image">${item.imageUrl
         ? `<img src="${esc(item.imageUrl)}" alt="Submitted evidence for user ${esc(item.userId)}" loading="lazy">`
         : '<div class="empty">Screenshot file is unavailable.</div>'}</div>
@@ -543,8 +543,8 @@ function renderReviews() {
         </div>
         <label>Review notes<textarea data-review-notes maxlength="1000" placeholder="Optional for approval; explain what must change when rejecting."></textarea></label>
         <div class="review-actions">
-          <button class="primary-button review-approve" type="button" data-review-action="approve" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : 'Approve for reward'}</button>
-          <button class="secondary-button review-reject" type="button" data-review-action="reject" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}>Reject &amp; allow retry</button>
+          <button class="primary-button review-approve" type="button" aria-keyshortcuts="ArrowRight" title="Keyboard shortcut: Right Arrow" data-review-action="approve" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : 'Approve for reward <span class="key-hint" aria-hidden="true">→</span>'}</button>
+          <button class="secondary-button review-reject" type="button" aria-keyshortcuts="ArrowLeft" title="Keyboard shortcut: Left Arrow" data-review-action="reject" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}><span class="key-hint" aria-hidden="true">←</span> Reject &amp; allow retry</button>
         </div>
       </div>
     </article>`;
@@ -578,6 +578,31 @@ function updateCampaignAfterReview(result) {
   if (result.decision === 'approve') campaign.approved = (Number(campaign.approved) || 0) + 1;
   else campaign.rejected = (Number(campaign.rejected) || 0) + 1;
   renderCampaigns();
+}
+
+function visibleReviewCard() {
+  const visible = card => {
+    const rect = card.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < window.innerHeight;
+  };
+  const focusedCard = document.activeElement?.closest?.('[data-review-card]');
+  if (focusedCard && visible(focusedCard)) return focusedCard;
+  const section = $('#reviews');
+  const sectionRect = section.getBoundingClientRect();
+  if (sectionRect.bottom <= 0 || sectionRect.top >= window.innerHeight) return null;
+  return [...section.querySelectorAll('[data-review-card]')].find(visible) || null;
+}
+
+function handleReviewShortcut(event) {
+  if (!['ArrowLeft', 'ArrowRight'].includes(event.key) || event.defaultPrevented || event.repeat) return;
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  const card = visibleReviewCard();
+  const decision = event.key === 'ArrowRight' ? 'approve' : 'reject';
+  const button = card?.querySelector(`[data-review-action="${decision}"]`);
+  if (!button || button.disabled) return;
+  event.preventDefault();
+  button.click();
 }
 
 async function submitReview(button) {
@@ -755,6 +780,7 @@ function bindEvents() {
     const button = event.target.closest('[data-review-action]');
     if (button) submitReview(button);
   });
+  document.addEventListener('keydown', handleReviewShortcut);
 }
 
 function selectRow(row) {
