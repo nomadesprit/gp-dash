@@ -26,6 +26,15 @@ const state = {
   currentIds: [],
   currentUniqueIdCount: 0,
   preparedCampaign: null,
+  reviews: {
+    loading: true,
+    error: '',
+    message: '',
+    selectedCampaign: '',
+    campaigns: [],
+    items: [],
+    busyReviewId: '',
+  },
 };
 
 const recordKey = record => `${record.brand}|${record.store}|${record.countryCode}`;
@@ -449,6 +458,191 @@ function renderCampaigns() {
   $('#redirect-trend').innerHTML = `<svg class="redirect-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="${formatInt(total)} daily store redirects from ${series[0].date} through ${series.at(-1).date} in the current filtered scope"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line><polyline points="${points}"></polyline>${dots}</svg><div class="chart-labels"><span>${series[0].date}</span><span>${formatInt(total)} total redirects</span><span>${series.at(-1).date}</span></div>`;
 }
 
+function reviewCampaign() {
+  return state.reviews.campaigns.find(campaign => campaign.campaignId === state.reviews.selectedCampaign) || null;
+}
+
+function reviewDate(value) {
+  if (!value) return 'Unknown';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+async function responseJson(response) {
+  try { return await response.json(); }
+  catch { return {}; }
+}
+
+function renderReviews() {
+  const select = $('#review-campaign');
+  const status = $('#review-status');
+  const queue = $('#review-queue');
+  const download = $('#download-approved');
+  const refresh = $('#refresh-reviews');
+  refresh.disabled = state.reviews.loading;
+
+  if (state.reviews.loading) {
+    status.className = 'campaign-prepare-status';
+    status.textContent = 'Refreshing the protected review queue…';
+    queue.innerHTML = '';
+    download.disabled = true;
+    return;
+  }
+  if (state.reviews.error) {
+    status.className = 'campaign-prepare-status error';
+    status.textContent = state.reviews.error;
+    queue.innerHTML = '';
+    download.disabled = true;
+    return;
+  }
+
+  if (!state.reviews.campaigns.some(campaign => campaign.campaignId === state.reviews.selectedCampaign)) {
+    state.reviews.selectedCampaign = state.reviews.campaigns.find(campaign => campaign.pending > 0)?.campaignId
+      || state.reviews.campaigns[0]?.campaignId || '';
+  }
+  select.innerHTML = state.reviews.campaigns.length
+    ? state.reviews.campaigns.map(campaign => `<option value="${esc(campaign.campaignId)}" ${campaign.campaignId === state.reviews.selectedCampaign ? 'selected' : ''}>${esc(campaign.campaignName)} · ${formatInt(campaign.pending)} pending</option>`).join('')
+    : '<option value="">No submitted evidence yet</option>';
+  select.disabled = !state.reviews.campaigns.length;
+
+  const campaign = reviewCampaign();
+  const selectedItems = state.reviews.items.filter(item => item.campaignId === state.reviews.selectedCampaign);
+  $('#review-summary').innerHTML = [
+    { label: 'Pending review', value: campaign?.pending || 0, note: 'Requires a decision' },
+    { label: 'Approved', value: campaign?.approved || 0, note: 'Reward eligible' },
+    { label: 'Rejected', value: campaign?.rejected || 0, note: 'May upload again' },
+  ].map(item => `<div class="progress-kpi"><span>${item.label}</span><strong>${formatInt(item.value)}</strong><small>${item.note}</small></div>`).join('');
+
+  download.disabled = !campaign || campaign.pending > 0 || campaign.approved < 1;
+  status.className = `campaign-prepare-status${state.reviews.message ? ' success' : ''}`;
+  status.textContent = state.reviews.message || (campaign
+    ? campaign.pending > 0
+      ? `${formatInt(campaign.pending)} submission${campaign.pending === 1 ? '' : 's'} still need review. The reward CSV unlocks when the pending count reaches zero.`
+      : campaign.approved > 0
+        ? 'Review is complete. The approved USERID CSV is ready to download.'
+        : 'Review is complete. No users were approved for a reward.'
+    : 'No screenshots have been submitted for review yet.');
+
+  if (!selectedItems.length) {
+    queue.innerHTML = `<div class="empty">${campaign ? 'No pending screenshots for this campaign.' : 'The queue will appear here after a participant uploads a screenshot.'}</div>`;
+    return;
+  }
+  queue.innerHTML = selectedItems.map((item, index) => {
+    const busy = state.reviews.busyReviewId === item.reviewId;
+    return `<article class="review-card" data-review-card="${esc(item.reviewId)}">
+      <div class="review-image">${item.imageUrl
+        ? `<img src="${esc(item.imageUrl)}" alt="Submitted evidence for user ${esc(item.userId)}" loading="lazy">`
+        : '<div class="empty">Screenshot file is unavailable.</div>'}</div>
+      <div class="review-details">
+        <div class="panel-heading"><h3>${esc(item.campaignName)}</h3><span class="badge assumption">Pending review</span></div>
+        <div class="review-meta">
+          <div><strong>${esc(item.userId)}</strong><span>User ID</span></div>
+          <div><strong>${esc(reviewDate(item.submittedAt))}</strong><span>Submitted</span></div>
+          <div><strong>${esc(item.selectedLanguage || 'Not selected')}</strong><span>Upload language</span></div>
+          <div><strong>${index + 1} of ${selectedItems.length}</strong><span>Queue position</span></div>
+        </div>
+        <label>Review notes<textarea data-review-notes maxlength="1000" placeholder="Optional for approval; explain what must change when rejecting."></textarea></label>
+        <div class="review-actions">
+          <button class="primary-button review-approve" type="button" data-review-action="approve" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : 'Approve for reward'}</button>
+          <button class="secondary-button review-reject" type="button" data-review-action="reject" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}>Reject &amp; allow retry</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+async function loadReviewQueue(message = '') {
+  state.reviews.loading = true;
+  state.reviews.error = '';
+  state.reviews.message = '';
+  renderReviews();
+  try {
+    const response = await fetch('/api/reviews', { cache: 'no-store', credentials: 'same-origin' });
+    const payload = await responseJson(response);
+    if (!response.ok) throw new Error(payload.error || `Review API returned ${response.status}`);
+    state.reviews.campaigns = payload.campaigns || [];
+    state.reviews.items = payload.items || [];
+    state.reviews.message = message;
+  } catch (error) {
+    state.reviews.error = `Review queue unavailable: ${error.message}`;
+  } finally {
+    state.reviews.loading = false;
+    renderReviews();
+  }
+}
+
+function updateCampaignAfterReview(result) {
+  const campaign = state.data?.campaigns?.find(row => row.campaign_id === result.campaignId);
+  if (!campaign) return;
+  campaign.pending_review = Math.max(0, (Number(campaign.pending_review) || 0) - 1);
+  if (result.decision === 'approve') campaign.approved = (Number(campaign.approved) || 0) + 1;
+  else campaign.rejected = (Number(campaign.rejected) || 0) + 1;
+  renderCampaigns();
+}
+
+async function submitReview(button) {
+  const reviewId = button.dataset.reviewId;
+  const decision = button.dataset.reviewAction;
+  const card = button.closest('[data-review-card]');
+  const notes = card?.querySelector('[data-review-notes]')?.value.trim() || '';
+  const prompt = decision === 'approve'
+    ? 'Approve this participant for a reward and permanently block them from future campaigns?'
+    : 'Reject this screenshot and allow the participant to upload again before the link expires?';
+  if (!window.confirm(prompt)) return;
+  state.reviews.busyReviewId = reviewId;
+  renderReviews();
+  try {
+    const response = await fetch('/api/reviews/action', {
+      method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewId, decision, notes }),
+    });
+    const payload = await responseJson(response);
+    if (!response.ok) throw new Error(payload.error || `Review API returned ${response.status}`);
+    updateCampaignAfterReview(payload);
+    await loadReviewQueue(decision === 'approve'
+      ? `User ${payload.userId} approved and added to reward eligibility.`
+      : `User ${payload.userId} rejected and can retry with the same active link.`);
+  } catch (error) {
+    state.reviews.error = `Review was not saved: ${error.message}`;
+  } finally {
+    state.reviews.busyReviewId = '';
+    state.reviews.loading = false;
+    renderReviews();
+  }
+}
+
+async function downloadApprovedUsers() {
+  const campaignId = state.reviews.selectedCampaign;
+  if (!campaignId) return;
+  const button = $('#download-approved');
+  button.disabled = true;
+  button.textContent = 'Generating…';
+  try {
+    const response = await fetch(`/api/reviews/export?campaign=${encodeURIComponent(campaignId)}`, {
+      cache: 'no-store', credentials: 'same-origin',
+    });
+    if (!response.ok) {
+      const payload = await responseJson(response);
+      throw new Error(payload.error || `Export returned ${response.status}`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `approved-users-${campaignId.replace(/[^A-Za-z0-9_-]+/g, '_')}.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    state.reviews.message = 'Approved USERID CSV downloaded.';
+  } catch (error) {
+    state.reviews.error = `Approved users were not exported: ${error.message}`;
+  } finally {
+    button.textContent = 'Download approved USERID CSV';
+    renderReviews();
+  }
+}
+
 function renderQuality() {
   const unmapped = state.data.unmapped;
   const meta = state.data.snapshotMetadata;
@@ -471,9 +665,9 @@ function renderQuality() {
     <div class="quality-item"><strong>Popup semantics</strong>Accepted means store redirect. Popup star distributions are sentiment signals, not external-store reviews.</div>
     <div class="quality-item"><strong>Popup summary cross-check</strong>${popupCrossCheck} Scoped KPIs use raw rows for consistent country and volume filtering.</div>
     <div class="quality-item"><strong>Campaign source</strong>${state.data.mode === 'live-private-sheet-api' ? 'Live private tracker aggregates were refreshed' : 'Synthetic demo data is active'} ${esc(state.data.campaignTracker?.generatedAt || 'at an unknown time')}. Current smoke-test and unassigned rows are excluded; no production outcomes are invented.</div>
-    <div class="quality-item"><strong>Campaign privacy</strong>No user IDs, token hashes, submission or claim IDs, Drive file IDs, screenshot URLs, images, or review notes are deployed. Screenshots remain in the private evidence store and are configured for ${formatInt(state.data.campaignTracker?.retentionDays || 90)}-day retention.</div>
+    <div class="quality-item"><strong>Campaign privacy</strong>The analytics API excludes user IDs, token hashes, submission or claim IDs, Drive file IDs, screenshot URLs, images, and review notes. The Access-protected review API exposes only the selected queue context and streams images without revealing Drive identifiers. Screenshots remain in the private evidence store and are configured for ${formatInt(state.data.campaignTracker?.retentionDays || 90)}-day retention.</div>
     <div class="quality-item"><strong>Campaign country join</strong>${registryConnected ? `The privacy-safe Campaigns registry is connected with ${formatInt(registryRows)} production row${registryRows === 1 ? '' : 's'} and ${formatInt(testRegistryRows)} internal test row${testRegistryRows === 1 ? '' : 's'}. Test cohort rows are shown separately and do not affect country ratings or production campaign totals.` : 'The fallback snapshot predates the Campaigns registry; live mode is required for current campaign joins.'}</div>
-    <div class="quality-item"><strong>Participation evidence</strong>An accepted screenshot proves only that the campaign verification step was accepted. It is not automatically a verified external-store rating and must not determine reward eligibility or rating value.</div>
+    <div class="quality-item"><strong>Participation evidence</strong>An approved screenshot establishes reward eligibility for this workflow. Reviewers must ignore rating value or sentiment; approval is not automatically a verified external-store rating.</div>
     <div class="quality-item"><strong>Popup workbook coverage</strong>${meta ? `${formatInt(meta.rawRows)} raw snapshot rows, ${formatInt(meta.countryRateRows)} Rates-by-Country rows, ${formatInt(meta.dailyRedirectRows)} daily rows, and ${formatInt(meta.feedbackTicketRowsAggregated)} feedback tickets are represented.` : 'Popup snapshot metadata unavailable.'} Personal IDs and free-text feedback are not included.</div>
   </div>`;
 }
@@ -554,6 +748,13 @@ function bindEvents() {
   $('#download-mailing').addEventListener('click', downloadMailingCsv);
   $('#download-exclusions').addEventListener('click', downloadExclusionsCsv);
   $('#campaign-form').addEventListener('submit', prepareCampaign);
+  $('#review-campaign').addEventListener('change', event => { state.reviews.selectedCampaign = event.target.value; state.reviews.message = ''; renderReviews(); });
+  $('#refresh-reviews').addEventListener('click', () => loadReviewQueue());
+  $('#download-approved').addEventListener('click', downloadApprovedUsers);
+  $('#review-queue').addEventListener('click', event => {
+    const button = event.target.closest('[data-review-action]');
+    if (button) submitReview(button);
+  });
 }
 
 function selectRow(row) {
@@ -726,6 +927,7 @@ async function start() {
     initializeFilters();
     bindEvents();
     render();
+    await loadReviewQueue();
   } catch (error) {
     $('#source-mode').textContent = 'Source load failed';
     $('#freshness-notice').textContent = error.message;
