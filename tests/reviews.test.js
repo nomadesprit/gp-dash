@@ -52,6 +52,24 @@ test('review queue exposes review context without Drive or token identifiers', (
   assert.equal(JSON.stringify(snapshot.items).includes('current-token'), false);
 });
 
+test('technical smoke campaigns never enter reward review or export data', () => {
+  const snapshot = buildReviewSnapshot({
+    submissionRows: [
+      row(SUBMISSION_COLUMNS, {
+        submission_id: 'smoke-1', user_id: 'technical-user', campaign_id: 'automated_smoke_test',
+        status: 'pending_verification', drive_file_id: 'private-smoke-image',
+      }),
+      row(SUBMISSION_COLUMNS, {
+        submission_id: 'pilot-1', user_id: 'real-user', campaign_id: 'pilot_20260917_2',
+        status: 'pending_verification', drive_file_id: 'private-pilot-image',
+      }),
+    ],
+  });
+  assert.deepEqual(snapshot.items.map(item => item.reviewId), ['pilot-1']);
+  assert.deepEqual(snapshot.campaigns.map(campaign => campaign.campaignId), ['pilot_20260917_2']);
+  assert.equal(snapshot.submissions.some(item => item.submission_id === 'smoke-1'), false);
+});
+
 test('review APIs require the production host and a Cloudflare Access identity', () => {
   const anonymous = new Request('https://gp-dash.pages.dev/api/reviews');
   const protectedRequest = new Request('https://gp-dash.pages.dev/api/reviews', {
