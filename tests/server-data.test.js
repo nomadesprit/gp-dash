@@ -23,7 +23,7 @@ test('server campaign aggregation joins the registry and keeps discontiguous tra
   const result = summarizeCampaignTracker({
     registryRows,
     participantRanges: [
-      [['status', 'current_campaign_id'], ['eligible', 'br_aug'], ['blocked', 'automated_smoke_test']],
+      [['user_id', 'status', 'current_campaign_id'], ['private-a', 'eligible', 'br_aug'], ['private-b', 'blocked', 'automated_smoke_test']],
       [['BRAND'], ['IQ Option'], ['IQ Option']],
     ],
     submissionRanges: [
@@ -43,7 +43,7 @@ test('server campaign aggregation joins the registry and keeps discontiguous tra
   assert.equal(result.metadata.excludedTestParticipants, 1);
   assert.equal(result.metadata.excludedTestSubmissions, 1);
   const serialized = JSON.stringify(result);
-  for (const forbidden of ['user_id', 'token_hash', 'file_id', 'screenshot_url', 'review_notes']) assert.equal(serialized.includes(forbidden), false);
+  for (const forbidden of ['user_id', 'private-a', 'private-b', 'token_hash', 'file_id', 'screenshot_url', 'review_notes']) assert.equal(serialized.includes(forbidden), false);
 });
 
 test('TEST country uploads are visible in aggregate while smoke campaigns stay excluded', () => {
@@ -54,7 +54,7 @@ test('TEST country uploads are visible in aggregate while smoke campaigns stay e
   const result = summarizeCampaignTracker({
     registryRows,
     participantRanges: [
-      [['status', 'current_campaign_id'], ['eligible', 'pilot_20260917'], ['eligible', 'pilot_20260917'], ['blocked', 'automated_smoke_test']],
+      [['user_id', 'status', 'current_campaign_id'], ['private-a', 'eligible', 'pilot_20260917'], ['private-b', 'eligible', 'pilot_20260917'], ['private-c', 'blocked', 'automated_smoke_test']],
       [['brand'], ['IQ Option'], ['IQ Option'], ['IQ Option']],
     ],
     submissionRanges: [
@@ -73,6 +73,23 @@ test('TEST country uploads are visible in aggregate while smoke campaigns stay e
   assert.equal(result.metadata.productionCampaignRegistryRows, 0);
   assert.equal(result.metadata.testCampaignRegistryRows, 1);
   assert.equal(result.metadata.excludedTestSubmissions, 1);
+});
+
+test('dashboard counts only the latest campaign assignment for duplicate participant rows', () => {
+  const result = summarizeCampaignTracker({
+    registryRows: [
+      ['campaign_id', 'brand', 'store', 'country', 'audience_size'],
+      ['pilot_old', 'IQ Option', 'GooglePlay', 'TEST', '1'],
+      ['pilot_current', 'IQ Option', 'GooglePlay', 'TEST', '1'],
+    ],
+    participantRanges: [
+      [['user_id', 'status', 'current_campaign_id'], ['private-a', 'eligible', 'pilot_old'], ['private-a', 'eligible', 'pilot_current']],
+      [['brand'], ['IQ Option'], ['IQ Option']],
+    ],
+  });
+  assert.equal(result.campaigns.find(row => row.campaign_id === 'pilot_old').assigned_participants, 0);
+  assert.equal(result.campaigns.find(row => row.campaign_id === 'pilot_current').assigned_participants, 1);
+  assert.equal(JSON.stringify(result).includes('private-a'), false);
 });
 
 test('freshness follows the documented Friday and monthly warning windows', () => {

@@ -1,4 +1,4 @@
-import { resolvePrivateSources, SOURCE_CACHE_SECONDS } from '../lib/source-config.js';
+import { DASHBOARD_CACHE_VERSION, resolvePrivateSources, SOURCE_CACHE_SECONDS } from '../lib/source-config.js';
 import { freshness, latestDate, summarizeCampaignTracker, summarizeFeedback } from '../lib/server-data.js';
 
 const encoder = new TextEncoder();
@@ -6,7 +6,6 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets.readonly',
   'https://www.googleapis.com/auth/drive.metadata.readonly',
 ].join(' ');
-const CACHE_VERSION = 'test-cohort-v1';
 const ALLOWED_HOSTS = new Set(['gp-dash.pages.dev', 'localhost', '127.0.0.1']);
 
 function base64Url(value) {
@@ -214,7 +213,7 @@ export async function onRequestGet(context) {
   if (!ALLOWED_HOSTS.has(hostname)) return jsonResponse({ error: 'Not found.' }, 404);
   const cache = caches.default;
   const cacheUrl = new URL('/api/dashboard', context.request.url);
-  cacheUrl.searchParams.set('cache', CACHE_VERSION);
+  cacheUrl.searchParams.set('cache', DASHBOARD_CACHE_VERSION);
   const cacheKey = new Request(cacheUrl, { method: 'GET' });
   const cached = await cache.match(cacheKey);
   if (cached) return cached;

@@ -84,7 +84,15 @@ function count(value) {
 }
 
 export function summarizeCampaignTracker({ participantRanges = [], submissionRanges = [], registryRows = [] } = {}) {
-  const participants = rowsToObjects(mergeRanges(participantRanges, [['status', 'current_campaign_id'], ['brand']]));
+  const participants = rowsToObjects(mergeRanges(participantRanges, [['user_id', 'status', 'current_campaign_id'], ['brand']]));
+  const latestParticipantsById = new Map();
+  const participantsWithoutId = [];
+  participants.forEach(row => {
+    const id = String(row.user_id || '').trim();
+    if (id) latestParticipantsById.set(id, row);
+    else participantsWithoutId.push(row);
+  });
+  const currentParticipants = [...participantsWithoutId, ...latestParticipantsById.values()];
   const submissions = rowsToObjects(mergeRanges(submissionRanges, [['campaign_id'], ['status'], ['selected_language'], ['submitted_at', 'reviewed_at'], ['retention_deleted_at']]));
   const registry = rowsToObjects(registryRows);
   const registryById = new Map(registry.map(row => [String(row.campaign_id || '').trim(), row]));
@@ -144,7 +152,7 @@ export function summarizeCampaignTracker({ participantRanges = [], submissionRan
     if (id && !testCampaign(id)) getCampaign(id);
   });
 
-  participants.forEach(row => {
+  currentParticipants.forEach(row => {
     const campaignId = String(row.current_campaign_id || '').trim();
     if (!campaignId) { metadata.unassignedParticipants += 1; return; }
     if (testCampaign(campaignId)) { metadata.excludedTestParticipants += 1; return; }
