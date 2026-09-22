@@ -19,6 +19,7 @@ export const CAMPAIGN_COLUMNS = [
 
 const DECISIONS = new Set(['approve', 'reject']);
 const PENDING_STATUS = 'pending_verification';
+const technicalCampaign = value => /(^|[_-])(test|smoke)([_-]|$)/i.test(String(value || ''));
 
 function text(value) {
   return String(value ?? '').trim();
@@ -70,7 +71,8 @@ function isRewardEligible(row) {
 
 export function buildReviewSnapshot({ participantRows = [], submissionRows = [], registryRows = [] } = {}) {
   const participants = records(PARTICIPANT_COLUMNS, participantRows);
-  const submissions = records(SUBMISSION_COLUMNS, submissionRows);
+  const submissions = records(SUBMISSION_COLUMNS, submissionRows)
+    .filter(row => !technicalCampaign(row.campaign_id));
   const registry = records(CAMPAIGN_COLUMNS, registryRows);
   const campaignNames = new Map(registry.map(row => [row.campaign_id, row.name || row.campaign_id]));
   const summaries = new Map();
