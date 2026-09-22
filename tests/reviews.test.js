@@ -8,7 +8,9 @@ import {
   buildReviewSnapshot,
   planReviewDecision,
 } from '../functions/lib/reviews.js';
-import { reviewAuthorized, reviewHostAllowed, sameOriginWrite } from '../functions/lib/google-review.js';
+import {
+  GOOGLE_JWT_GRANT_TYPE, reviewAuthorized, reviewHostAllowed, sameOriginWrite,
+} from '../functions/lib/google-review.js';
 
 const row = (columns, values) => columns.map(column => values[column] ?? '');
 
@@ -60,6 +62,10 @@ test('review APIs require the production host and a Cloudflare Access identity',
   assert.equal(reviewAuthorized(protectedRequest), true);
   assert.equal(reviewHostAllowed(new Request('https://preview.pages.dev/api/reviews')), false);
   assert.equal(reviewAuthorized(new Request('http://localhost:8788/api/reviews')), true);
+});
+
+test('review API uses the standard Google JWT bearer grant type', () => {
+  assert.equal(GOOGLE_JWT_GRANT_TYPE, 'urn:ietf:params:oauth:grant-type:jwt-bearer');
 });
 
 test('review writes accept only the same browser origin', () => {
