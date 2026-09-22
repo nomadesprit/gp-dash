@@ -23,9 +23,9 @@ const SOURCE_RULES = {
     warningAfterDays: 10,
   },
   campaign: {
-    registryRange: "'Campaigns'!A1:R1000",
-    participantRanges: ["'Participants'!B1:C10005", "'Participants'!L1:L10005"],
-    submissionRanges: ["'Submissions'!C1:C1003", "'Submissions'!E1:E1003", "'Submissions'!G1:G1003", "'Submissions'!K1:L1003", "'Submissions'!O1:O1003"],
+    registryRange: "'Campaigns'!A1:R",
+    participantRanges: ["'Participants'!A1:C", "'Participants'!L1:L"],
+    submissionRanges: ["'Submissions'!C1:C", "'Submissions'!E1:E", "'Submissions'!G1:G", "'Submissions'!K1:L", "'Submissions'!O1:O"],
     cadence: 'Operational tracker',
     warningAfterDays: 2,
     retentionDays: 90,
@@ -44,3 +44,4 @@ export function resolvePrivateSources(secretValue) {
 }
 
 export const SOURCE_CACHE_SECONDS = 900;
+export const DASHBOARD_CACHE_VERSION = 'test-cohort-v1';
