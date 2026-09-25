@@ -35,6 +35,9 @@ const state = {
     campaigns: [],
     items: [],
     busyReviewId: '',
+    savingDecision: false,
+    actionError: '',
+    queueMinHeight: 0,
     undo: null,
   },
 };
@@ -474,6 +477,35 @@ async function responseJson(response) {
   catch { return {}; }
 }
 
+function renderReviewStatus(campaign) {
+  const status = $('#review-status');
+  const download = $('#download-approved');
+  download.disabled = state.reviews.savingDecision || !campaign || campaign.pending > 0 || campaign.approved < 1;
+  const statusMessage = state.reviews.message || (campaign
+    ? campaign.pending > 0
+      ? `${formatInt(campaign.pending)} submission${campaign.pending === 1 ? '' : 's'} still need${campaign.pending === 1 ? 's' : ''} review. The reward CSV unlocks when the pending count reaches zero.`
+      : campaign.approved > 0
+        ? 'Review is complete. The approved USERID CSV is ready to download.'
+        : 'Review is complete. No users were approved for a reward.'
+    : 'No screenshots have been submitted for review yet.');
+  const visibleStatusMessage = state.reviews.actionError || statusMessage;
+  status.className = `campaign-prepare-status${state.reviews.actionError ? ' error' : state.reviews.message && !state.reviews.savingDecision ? ' success' : ''}${state.reviews.undo ? ' review-undo-status' : ''}`;
+  status.innerHTML = state.reviews.undo
+    ? `<span>${esc(visibleStatusMessage)}</span><button class="secondary-button" type="button" data-review-undo ${state.reviews.savingDecision ? 'disabled' : ''}>Undo last decision</button>`
+    : esc(visibleStatusMessage);
+}
+
+function syncReviewActionAvailability() {
+  document.querySelectorAll('[data-review-card]').forEach(card => {
+    const busy = state.reviews.busyReviewId === card.dataset.reviewCard;
+    const image = card.querySelector('[data-review-image]');
+    const approve = card.querySelector('[data-review-action="approve"]');
+    const reject = card.querySelector('[data-review-action="reject"]');
+    if (approve) approve.disabled = state.reviews.savingDecision || busy || !image || image.hidden;
+    if (reject) reject.disabled = state.reviews.savingDecision || busy;
+  });
+}
+
 function renderReviews() {
   const select = $('#review-campaign');
   const status = $('#review-status');
@@ -481,7 +513,8 @@ function renderReviews() {
   const download = $('#download-approved');
   const refresh = $('#refresh-reviews');
   clearReviewImageObjects(queue);
-  refresh.disabled = state.reviews.loading;
+  queue.style.minHeight = state.reviews.queueMinHeight ? `${state.reviews.queueMinHeight}px` : '';
+  refresh.disabled = state.reviews.loading || state.reviews.savingDecision;
 
   if (state.reviews.loading) {
     status.className = 'campaign-prepare-status';
@@ -515,18 +548,7 @@ function renderReviews() {
     { label: 'Rejected', value: campaign?.rejected || 0, note: 'May upload again' },
   ].map(item => `<div class="progress-kpi"><span>${item.label}</span><strong>${formatInt(item.value)}</strong><small>${item.note}</small></div>`).join('');
 
-  download.disabled = !campaign || campaign.pending > 0 || campaign.approved < 1;
-  const statusMessage = state.reviews.message || (campaign
-    ? campaign.pending > 0
-      ? `${formatInt(campaign.pending)} submission${campaign.pending === 1 ? '' : 's'} still need${campaign.pending === 1 ? 's' : ''} review. The reward CSV unlocks when the pending count reaches zero.`
-      : campaign.approved > 0
-        ? 'Review is complete. The approved USERID CSV is ready to download.'
-        : 'Review is complete. No users were approved for a reward.'
-    : 'No screenshots have been submitted for review yet.');
-  status.className = `campaign-prepare-status${state.reviews.message ? ' success' : ''}${state.reviews.undo ? ' review-undo-status' : ''}`;
-  status.innerHTML = state.reviews.undo
-    ? `<span>${esc(statusMessage)}</span><button class="secondary-button" type="button" data-review-undo ${state.reviews.busyReviewId ? 'disabled' : ''}>Undo last decision</button>`
-    : esc(statusMessage);
+  renderReviewStatus(campaign);
 
   if (!selectedItems.length) {
     queue.innerHTML = `<div class="empty">${campaign ? 'No pending screenshots for this campaign.' : 'The queue will appear here after a participant uploads a screenshot.'}</div>`;
@@ -534,6 +556,7 @@ function renderReviews() {
   }
   queue.innerHTML = selectedItems.map((item, index) => {
     const busy = state.reviews.busyReviewId === item.reviewId;
+    const actionsDisabled = busy || state.reviews.savingDecision;
     return `<article class="review-card" data-review-card="${esc(item.reviewId)}" tabindex="0" aria-label="Review screenshot for user ${esc(item.userId)}. Press Right Arrow to approve or Left Arrow to reject.">
       <div class="review-image">${item.imageUrl
         ? `<img alt="Submitted evidence for user ${esc(item.userId)}" data-review-image data-review-image-url="${esc(item.imageUrl)}" hidden>
@@ -558,7 +581,7 @@ function renderReviews() {
         <label>Review notes<textarea data-review-notes maxlength="1000" placeholder="Optional for approval; explain what must change when rejecting."></textarea></label>
         <div class="review-actions">
           <button class="primary-button review-approve" type="button" aria-keyshortcuts="ArrowRight" title="Keyboard shortcut: Right Arrow" data-review-action="approve" data-review-id="${esc(item.reviewId)}" disabled>${busy ? 'Saving…' : 'Approve for reward <span class="key-hint" aria-hidden="true">→</span>'}</button>
-          <button class="secondary-button review-reject" type="button" aria-keyshortcuts="ArrowLeft" title="Keyboard shortcut: Left Arrow" data-review-action="reject" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}><span class="key-hint" aria-hidden="true">←</span> Reject &amp; allow retry</button>
+          <button class="secondary-button review-reject" type="button" aria-keyshortcuts="ArrowLeft" title="Keyboard shortcut: Left Arrow" data-review-action="reject" data-review-id="${esc(item.reviewId)}" ${actionsDisabled ? 'disabled' : ''}><span class="key-hint" aria-hidden="true">←</span> Reject &amp; allow retry</button>
         </div>
       </div>
     </article>`;
@@ -582,7 +605,9 @@ function setReviewImageState(image, imageState, message = '') {
   if (loading) loading.hidden = imageState !== 'loading';
   if (error) error.hidden = imageState !== 'error';
   if (errorMessage && message) errorMessage.textContent = message;
-  if (approve) approve.disabled = imageState !== 'ready' || state.reviews.busyReviewId === card.dataset.reviewCard;
+  if (approve) approve.disabled = imageState !== 'ready'
+    || state.reviews.savingDecision
+    || state.reviews.busyReviewId === card.dataset.reviewCard;
 }
 
 function handleReviewImageEvent(event) {
@@ -652,6 +677,7 @@ function retryReviewImage(button) {
 async function loadReviewQueue(message = '') {
   state.reviews.loading = true;
   state.reviews.error = '';
+  state.reviews.actionError = '';
   state.reviews.message = '';
   renderReviews();
   try {
@@ -687,6 +713,45 @@ function updateCampaignAfterUndo(undo) {
   renderCampaigns();
 }
 
+function holdReviewQueueHeight() {
+  const queue = $('#review-queue');
+  state.reviews.queueMinHeight = Math.max(
+    state.reviews.queueMinHeight,
+    Math.ceil(queue.getBoundingClientRect().height),
+  );
+}
+
+function applyReviewDecisionLocally(reviewId, decision, notes = '') {
+  const index = state.reviews.items.findIndex(item => item.reviewId === reviewId);
+  if (index < 0) return null;
+  const [item] = state.reviews.items.splice(index, 1);
+  const campaign = state.reviews.campaigns.find(row => row.campaignId === item.campaignId);
+  if (campaign) {
+    campaign.pending = Math.max(0, Number(campaign.pending) - 1);
+    const resultKey = decision === 'approve' ? 'approved' : 'rejected';
+    campaign[resultKey] = Number(campaign[resultKey]) + 1;
+  }
+  return { reviewId, decision, notes, item, index, userId: item.userId, campaignId: item.campaignId };
+}
+
+function restoreReviewDecisionLocally(record) {
+  if (!record?.item || state.reviews.items.some(item => item.reviewId === record.reviewId)) return;
+  state.reviews.items.splice(Math.min(record.index, state.reviews.items.length), 0, record.item);
+  const campaign = state.reviews.campaigns.find(row => row.campaignId === record.campaignId);
+  if (campaign) {
+    campaign.pending = Number(campaign.pending) + 1;
+    const resultKey = record.decision === 'approve' ? 'approved' : 'rejected';
+    campaign[resultKey] = Math.max(0, Number(campaign[resultKey]) - 1);
+  }
+}
+
+function restoreReviewNotes(record) {
+  if (!record?.notes) return;
+  const selector = `[data-review-card="${CSS.escape(record.reviewId)}"] [data-review-notes]`;
+  const notes = document.querySelector(selector);
+  if (notes) notes.value = record.notes;
+}
+
 function visibleReviewCard() {
   const visible = card => {
     const rect = card.getBoundingClientRect();
@@ -713,11 +778,18 @@ function handleReviewShortcut(event) {
 }
 
 async function submitReview(button) {
+  if (state.reviews.savingDecision) return;
   const reviewId = button.dataset.reviewId;
   const decision = button.dataset.reviewAction;
   const card = button.closest('[data-review-card]');
   const notes = card?.querySelector('[data-review-notes]')?.value.trim() || '';
+  holdReviewQueueHeight();
+  const localDecision = applyReviewDecisionLocally(reviewId, decision, notes);
+  if (!localDecision) return;
+  state.reviews.savingDecision = true;
   state.reviews.busyReviewId = reviewId;
+  state.reviews.actionError = '';
+  state.reviews.message = 'Saving decision to Sheets…';
   renderReviews();
   try {
     const response = await fetch('/api/reviews/action', {
@@ -727,23 +799,35 @@ async function submitReview(button) {
     const payload = await responseJson(response);
     if (!response.ok) throw new Error(payload.error || `Review API returned ${response.status}`);
     updateCampaignAfterReview(payload);
-    state.reviews.undo = { reviewId, decision, userId: payload.userId, campaignId: payload.campaignId };
-    await loadReviewQueue(decision === 'approve'
+    state.reviews.undo = { ...localDecision, userId: payload.userId, campaignId: payload.campaignId };
+    state.reviews.message = decision === 'approve'
       ? `User ${payload.userId} approved and added to reward eligibility.`
-      : `User ${payload.userId} rejected and can retry with the same active link.`);
+      : `User ${payload.userId} rejected and can retry with the same active link.`;
   } catch (error) {
-    state.reviews.error = `Review was not saved: ${error.message}`;
+    restoreReviewDecisionLocally(localDecision);
+    state.reviews.actionError = `Review was not saved: ${error.message}`;
+    state.reviews.message = '';
   } finally {
     state.reviews.busyReviewId = '';
-    state.reviews.loading = false;
-    renderReviews();
+    state.reviews.savingDecision = false;
+    if (state.reviews.actionError) {
+      renderReviews();
+      restoreReviewNotes(localDecision);
+    } else {
+      renderReviewStatus(reviewCampaign());
+      $('#refresh-reviews').disabled = false;
+      syncReviewActionAvailability();
+    }
   }
 }
 
 async function undoReviewDecision(button) {
   const undo = state.reviews.undo;
-  if (!undo || state.reviews.busyReviewId) return;
+  if (!undo || state.reviews.savingDecision) return;
+  state.reviews.savingDecision = true;
   state.reviews.busyReviewId = undo.reviewId;
+  state.reviews.actionError = '';
+  state.reviews.message = 'Undoing last decision…';
   button.disabled = true;
   button.textContent = 'Undoing…';
   try {
@@ -754,13 +838,15 @@ async function undoReviewDecision(button) {
     const payload = await responseJson(response);
     if (!response.ok) throw new Error(payload.error || `Review API returned ${response.status}`);
     updateCampaignAfterUndo(undo);
+    restoreReviewDecisionLocally(undo);
     state.reviews.undo = null;
-    await loadReviewQueue(`Decision for user ${payload.userId} was undone and returned to the review queue.`);
+    state.reviews.message = `Decision for user ${payload.userId} was undone and returned to the review queue.`;
   } catch (error) {
-    state.reviews.error = `Review decision was not undone: ${error.message}`;
+    state.reviews.actionError = `Review decision was not undone: ${error.message}`;
+    state.reviews.message = '';
   } finally {
     state.reviews.busyReviewId = '';
-    state.reviews.loading = false;
+    state.reviews.savingDecision = false;
     renderReviews();
   }
 }
@@ -902,8 +988,17 @@ function bindEvents() {
   $('#download-mailing').addEventListener('click', downloadMailingCsv);
   $('#download-exclusions').addEventListener('click', downloadExclusionsCsv);
   $('#campaign-form').addEventListener('submit', prepareCampaign);
-  $('#review-campaign').addEventListener('change', event => { state.reviews.selectedCampaign = event.target.value; state.reviews.message = ''; renderReviews(); });
-  $('#refresh-reviews').addEventListener('click', () => loadReviewQueue());
+  $('#review-campaign').addEventListener('change', event => {
+    state.reviews.selectedCampaign = event.target.value;
+    state.reviews.message = '';
+    state.reviews.actionError = '';
+    state.reviews.queueMinHeight = 0;
+    renderReviews();
+  });
+  $('#refresh-reviews').addEventListener('click', () => {
+    state.reviews.queueMinHeight = 0;
+    loadReviewQueue();
+  });
   $('#download-approved').addEventListener('click', downloadApprovedUsers);
   $('#review-status').addEventListener('click', event => {
     const button = event.target.closest('[data-review-undo]');
