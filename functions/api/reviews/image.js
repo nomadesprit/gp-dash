@@ -4,6 +4,8 @@ import {
   jsonNoStore, reviewAccessToken, reviewAuthorized, reviewHostAllowed, reviewSheetRows,
 } from '../../lib/google-review.js';
 
+const DISPLAYABLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 export async function onRequestGet(context) {
   if (!reviewHostAllowed(context.request)) return jsonNoStore({ error: 'Not found.' }, 404);
   if (!reviewAuthorized(context.request)) return jsonNoStore({ error: 'Authentication required.' }, 401);
@@ -22,8 +24,10 @@ export async function onRequestGet(context) {
       { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) },
     );
     const contentType = (media.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (!media.ok || !['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
-      throw new Error(`Drive image request failed (${media.status})`);
+    if (!media.ok) throw new Error(`Drive image request failed (${media.status})`);
+    if (!DISPLAYABLE_IMAGE_TYPES.has(contentType)) {
+      console.error('review_image_type_error', { contentType: contentType || 'missing' });
+      return jsonNoStore({ error: 'The submitted file is not a supported image.' }, 415);
     }
     return new Response(media.body, {
       headers: {
