@@ -7,6 +7,7 @@ import {
   approvedUsersForCampaign,
   buildReviewSnapshot,
   planReviewDecision,
+  planReviewUndo,
 } from '../functions/lib/reviews.js';
 import {
   GOOGLE_JWT_GRANT_TYPE, reviewAuthorized, reviewHostAllowed, sameOriginWrite,
@@ -143,6 +144,37 @@ test('rejection marks reward ineligibility and leaves the link retryable', () =>
   assert.equal(participant.status, 'rejected');
   assert.equal(participant.token_hash, 'current-token');
   assert.deepEqual(plan.campaignValues.slice(11, 15), [1, 0, 0, 1]);
+});
+
+test('undo restores a reviewed submission, participant, and campaign to pending', () => {
+  const approved = planReviewDecision(pendingFixture(), {
+    reviewId: 'submission-1', decision: 'approve', notes: 'Readable evidence',
+    reviewerEmail: 'reviewer@iqoption.com', reviewedAt: '2026-09-22T11:00:00Z',
+  });
+  const decidedSnapshot = buildReviewSnapshot({
+    participantRows: [approved.participantValues],
+    submissionRows: [approved.submissionValues],
+    registryRows: [approved.campaignValues],
+  });
+  const undone = planReviewUndo(decidedSnapshot, {
+    reviewId: 'submission-1', reviewerEmail: 'reviewer@iqoption.com', reviewedAt: '2026-09-22T11:01:00Z',
+  });
+  const submission = Object.fromEntries(SUBMISSION_COLUMNS.map((column, index) => [column, undone.submissionValues[index]]));
+  const participant = Object.fromEntries(PARTICIPANT_COLUMNS.map((column, index) => [column, undone.participantValues[index]]));
+  assert.equal(submission.status, 'pending_verification');
+  assert.equal(submission.reward_eligible, '');
+  assert.equal(submission.reviewed_at, '');
+  assert.equal(participant.status, 'pending_verification');
+  assert.equal(participant.first_success_at, '');
+  assert.match(participant.notes, /Review undone by reviewer@iqoption\.com/);
+  assert.deepEqual(undone.campaignValues.slice(11, 15), [1, 1, 0, 0]);
+});
+
+test('review decisions use an undo action instead of modal confirmation', async () => {
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(app, /window\.confirm/);
+  assert.match(app, /data-review-undo/);
+  assert.match(app, /decision: 'undo'/);
 });
 
 test('approved reward CSV is campaign scoped and unavailable while reviews are pending', () => {
