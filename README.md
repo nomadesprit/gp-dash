@@ -105,7 +105,10 @@ Cloudflare Access reviewer identity, and permanently excludes that participant
 from later campaign preparation. A rejection writes `rejected` and
 `reward_eligible=no` to both records, leaving the active link retryable until its
 expiry. The submission row, participant row, and campaign counters are written
-in one Sheets batch request.
+in one Sheets batch request. Review decisions save immediately without a browser
+confirmation dialog. The latest decision can be undone from the queue, which
+returns the submission and participant to pending and reverses the campaign
+counters and reward eligibility in another atomic batch update.
 
 Approved-user export is campaign scoped. The download remains unavailable while
 that campaign has `pending_verification` submissions and contains only one
