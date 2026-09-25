@@ -181,9 +181,71 @@ export function planReviewDecision(snapshot, { reviewId, decision, notes, review
   } : null;
 
   return {
+    reviewId: submission.submission_id,
     decision: action,
     status,
     rewardEligible: action === 'approve',
+    userId: submission.user_id,
+    campaignId: submission.campaign_id,
+    submissionRange: `'Submissions'!A${submission._rowNumber}:Q${submission._rowNumber}`,
+    submissionValues: recordToRow(SUBMISSION_COLUMNS, updatedSubmission),
+    participantRange: `'Participants'!A${participant._rowNumber}:K${participant._rowNumber}`,
+    participantValues: recordToRow(PARTICIPANT_COLUMNS, updatedParticipant),
+    campaignRange: updatedCampaign ? `'Campaigns'!A${campaign._rowNumber}:R${campaign._rowNumber}` : '',
+    campaignValues: updatedCampaign ? recordToRow(CAMPAIGN_COLUMNS, updatedCampaign) : [],
+  };
+}
+
+export function planReviewUndo(snapshot, { reviewId, reviewerEmail, reviewedAt } = {}) {
+  const submission = snapshot.submissions.find(row => row.submission_id === text(reviewId));
+  if (!submission) throw new Error('Submission was not found.');
+  if (!['successful', 'rejected'].includes(submission.status)) {
+    throw new Error(submission.status === PENDING_STATUS
+      ? 'This review decision has already been undone.'
+      : 'This review decision cannot be undone.');
+  }
+  const participant = participantForSubmission(snapshot.participants, submission);
+  if (!participant) throw new Error('The participant record was not found.');
+
+  const now = text(reviewedAt) || new Date().toISOString();
+  const reviewer = cleanReviewer(reviewerEmail);
+  const hasOtherSuccess = snapshot.submissions.some(row =>
+    row.submission_id !== submission.submission_id
+    && row.user_id === submission.user_id
+    && row.status === 'successful');
+  const updatedSubmission = {
+    ...submission,
+    status: PENDING_STATUS,
+    reviewed_at: '',
+    review_notes: '',
+    reward_eligible: '',
+    reviewer_email: '',
+  };
+  const updatedParticipant = {
+    ...participant,
+    status: hasOtherSuccess ? 'successful' : PENDING_STATUS,
+    first_success_at: hasOtherSuccess ? participant.first_success_at : '',
+    updated_at: now,
+    notes: [participant.notes, `Review undone by ${reviewer}`].filter(Boolean).join(' | '),
+  };
+  const resultingSubmissions = snapshot.submissions.map(row =>
+    row.submission_id === submission.submission_id ? updatedSubmission : row);
+  const campaignSubmissions = resultingSubmissions.filter(row => row.campaign_id === submission.campaign_id);
+  const campaign = latestCampaign(snapshot.registry.filter(row => row.campaign_id === submission.campaign_id));
+  const updatedCampaign = campaign ? {
+    ...campaign,
+    evidence_submissions: campaignSubmissions.filter(row => row.submitted_at).length,
+    pending_review: campaignSubmissions.filter(row => row.status === PENDING_STATUS).length,
+    approved: campaignSubmissions.filter(row => row.status === 'successful').length,
+    rejected: campaignSubmissions.filter(row => ['rejected', 'blocked'].includes(row.status)).length,
+    source_updated_at: now,
+  } : null;
+
+  return {
+    reviewId: submission.submission_id,
+    decision: 'undo',
+    status: PENDING_STATUS,
+    rewardEligible: false,
     userId: submission.user_id,
     campaignId: submission.campaign_id,
     submissionRange: `'Submissions'!A${submission._rowNumber}:Q${submission._rowNumber}`,
