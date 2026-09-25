@@ -30,7 +30,7 @@ The browser calls the same-origin `GET /api/dashboard`. A Cloudflare Pages Funct
 
 Live responses are restricted to the Access-protected production hostname. Immutable Pages preview hostnames return 404 for `/api/dashboard`. Spreadsheet IDs and the credential are encrypted Pages secrets; no Google credential, fixed workbook identifier, raw user ID, token hash, file ID, screenshot URL, review note, or private source URL is committed or present in browser configuration.
 
-Required Google Cloud services are Google Sheets API and Google Drive API. The service account has read-only file sharing on the four source workbooks. Drive reads use Shared Drive support for the campaign tracker.
+Required Google Cloud services are Google Sheets API and Google Drive API. The service account has read-only file sharing on the four source workbooks. Drive reads use Shared Drive support for the campaign tracker. The review queue validates each stored file before enabling approval and automatically rejects unsupported media so the participant can retry.
 
 Key files:
 
