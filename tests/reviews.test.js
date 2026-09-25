@@ -177,6 +177,17 @@ test('review decisions use an undo action instead of modal confirmation', async 
   assert.match(app, /decision: 'undo'/);
 });
 
+test('review decisions advance locally without reloading the protected queue', async () => {
+  const app = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+  const submitStart = app.indexOf('async function submitReview');
+  const submitEnd = app.indexOf('async function undoReviewDecision');
+  const submitBody = app.slice(submitStart, submitEnd);
+  assert.match(submitBody, /applyReviewDecisionLocally/);
+  assert.doesNotMatch(submitBody, /loadReviewQueue/);
+  assert.match(app, /queueMinHeight/);
+  assert.match(app, /restoreReviewDecisionLocally/);
+});
+
 test('approved reward CSV is campaign scoped and unavailable while reviews are pending', () => {
   assert.throws(() => approvedUsersForCampaign(pendingFixture(), 'pilot_20260917_2'), /still need review/);
   const snapshot = buildReviewSnapshot({
