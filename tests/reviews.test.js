@@ -87,7 +87,7 @@ test('review API uses the standard Google JWT bearer grant type', () => {
   assert.equal(GOOGLE_JWT_GRANT_TYPE, 'urn:ietf:params:oauth:grant-type:jwt-bearer');
 });
 
-test('review preview fails closed and reports unsupported stored file types', async () => {
+test('review preview fails closed and automatically rejects unsupported stored file types', async () => {
   const [app, imageApi] = await Promise.all([
     readFile(new URL('../js/app.js', import.meta.url), 'utf8'),
     readFile(new URL('../functions/api/reviews/image.js', import.meta.url), 'utf8'),
@@ -95,6 +95,9 @@ test('review preview fails closed and reports unsupported stored file types', as
   assert.match(app, /data-review-image-error/);
   assert.match(app, /data-review-image-retry/);
   assert.match(app, /review-approve[^>]+disabled/);
+  assert.match(app, /response\.status === 415/);
+  assert.match(app, /Automatically rejected: the uploaded file is not a supported JPEG, PNG, or WebP image/);
+  assert.match(app, /decision: 'reject'/);
   assert.match(imageApi, /DISPLAYABLE_IMAGE_TYPES/);
   assert.match(imageApi, /supported image.*415/s);
 });
