@@ -479,6 +479,7 @@ function renderReviews() {
   const queue = $('#review-queue');
   const download = $('#download-approved');
   const refresh = $('#refresh-reviews');
+  clearReviewImageObjects(queue);
   refresh.disabled = state.reviews.loading;
 
   if (state.reviews.loading) {
@@ -531,10 +532,11 @@ function renderReviews() {
     const busy = state.reviews.busyReviewId === item.reviewId;
     return `<article class="review-card" data-review-card="${esc(item.reviewId)}" tabindex="0" aria-label="Review screenshot for user ${esc(item.userId)}. Press Right Arrow to approve or Left Arrow to reject.">
       <div class="review-image">${item.imageUrl
-        ? `<img src="${esc(item.imageUrl)}" alt="Submitted evidence for user ${esc(item.userId)}" loading="lazy" data-review-image>
+        ? `<img alt="Submitted evidence for user ${esc(item.userId)}" data-review-image data-review-image-url="${esc(item.imageUrl)}" hidden>
+          <div class="review-image-loading" data-review-image-loading>Loading screenshot…</div>
           <div class="review-image-error" data-review-image-error hidden>
             <strong>Screenshot preview unavailable</strong>
-            <span>The dashboard cannot read this private Drive file yet. Fix its Shared Drive access, then retry.</span>
+            <span data-review-image-error-message>The dashboard cannot read this private Drive file yet. Fix its Shared Drive access, then retry.</span>
             <button class="secondary-button" type="button" data-review-image-retry>Retry preview</button>
           </div>`
         : `<div class="review-image-error">
@@ -557,20 +559,81 @@ function renderReviews() {
       </div>
     </article>`;
   }).join('');
+  queue.querySelectorAll('[data-review-image]').forEach(loadReviewImage);
 }
 
-function setReviewImageState(image, ready) {
+function clearReviewImageObjects(root) {
+  root.querySelectorAll('[data-review-image][data-review-object-url]').forEach(image => {
+    URL.revokeObjectURL(image.dataset.reviewObjectUrl);
+  });
+}
+
+function setReviewImageState(image, imageState, message = '') {
   const card = image.closest('[data-review-card]');
   const error = card?.querySelector('[data-review-image-error]');
+  const errorMessage = card?.querySelector('[data-review-image-error-message]');
+  const loading = card?.querySelector('[data-review-image-loading]');
   const approve = card?.querySelector('[data-review-action="approve"]');
-  image.hidden = !ready;
-  if (error) error.hidden = ready;
-  if (approve) approve.disabled = !ready || state.reviews.busyReviewId === card.dataset.reviewCard;
+  image.hidden = imageState !== 'ready';
+  if (loading) loading.hidden = imageState !== 'loading';
+  if (error) error.hidden = imageState !== 'error';
+  if (errorMessage && message) errorMessage.textContent = message;
+  if (approve) approve.disabled = imageState !== 'ready' || state.reviews.busyReviewId === card.dataset.reviewCard;
 }
 
 function handleReviewImageEvent(event) {
   const image = event.target.closest?.('[data-review-image]');
-  if (image) setReviewImageState(image, event.type === 'load');
+  if (!image) return;
+  setReviewImageState(
+    image,
+    event.type === 'load' ? 'ready' : 'error',
+    'The screenshot could not be displayed. Retry the preview or reject the submission so the participant can upload again.',
+  );
+}
+
+async function rejectUnsupportedReviewImage(image) {
+  const card = image.closest('[data-review-card]');
+  const reviewId = card?.dataset.reviewCard;
+  if (!reviewId) throw new Error('The review item is missing its identifier.');
+  card.querySelectorAll('[data-review-action]').forEach(button => { button.disabled = true; });
+  const response = await fetch('/api/reviews/action', {
+    method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      reviewId,
+      decision: 'reject',
+      notes: 'Automatically rejected: the uploaded file is not a supported JPEG, PNG, or WebP image.',
+    }),
+  });
+  const payload = await responseJson(response);
+  if (!response.ok && response.status !== 409) {
+    throw new Error(payload.error || `Review API returned ${response.status}`);
+  }
+  if (response.ok) updateCampaignAfterReview(payload);
+  await loadReviewQueue('Unsupported upload rejected automatically. The participant can retry with the same active link.');
+}
+
+async function loadReviewImage(image) {
+  const imageUrl = image.dataset.reviewImageUrl;
+  if (!imageUrl) return;
+  setReviewImageState(image, 'loading');
+  try {
+    const response = await fetch(imageUrl, { cache: 'no-store', credentials: 'same-origin' });
+    if (!response.ok) {
+      const payload = await responseJson(response);
+      if (response.status === 415) {
+        await rejectUnsupportedReviewImage(image);
+        return;
+      }
+      throw new Error(payload.error || `Image API returned ${response.status}`);
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    if (image.dataset.reviewObjectUrl) URL.revokeObjectURL(image.dataset.reviewObjectUrl);
+    image.dataset.reviewObjectUrl = objectUrl;
+    image.src = objectUrl;
+  } catch (error) {
+    setReviewImageState(image, 'error', `The screenshot could not be loaded: ${error.message}`);
+  }
 }
 
 function retryReviewImage(button) {
@@ -579,9 +642,7 @@ function retryReviewImage(button) {
   if (!image) return;
   button.disabled = true;
   button.textContent = 'Retrying…';
-  const retryUrl = new URL(image.src, window.location.href);
-  retryUrl.searchParams.set('retry', Date.now().toString());
-  image.src = retryUrl.toString();
+  loadReviewImage(image);
 }
 
 async function loadReviewQueue(message = '') {
