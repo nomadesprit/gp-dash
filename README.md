@@ -161,7 +161,7 @@ Without item 1, the forecast remains unavailable or explicitly assumption-driven
 
 Cloudflare Pages deploys the static assets and `functions/` bundle together. The production hostname is protected by Cloudflare Access. JavaScript and CSS use revalidation headers; the API response uses a 15-minute server cache.
 
-The service-account JSON is stored only as the encrypted `GOOGLE_SERVICE_ACCOUNT_JSON` Pages secret. The four workbook identifiers are stored only as the encrypted `PRIVATE_SOURCE_IDS_JSON` Pages secret, using keys `appFollow`, `popup`, `volume`, and `campaign`. Never put either secret, a service-account JSON, `.dev.vars`, `.env`, workbook export, or user export in this directory or a deployment bundle.
+The service-account JSON is stored only as the encrypted `GOOGLE_SERVICE_ACCOUNT_JSON` Pages secret. The four workbook identifiers are stored only as the encrypted `PRIVATE_SOURCE_IDS_JSON` Pages secret, using keys `appFollow`, `popup`, `volume`, and `campaign`. The service account needs Editor access to the campaign tracker so review decisions can be saved, plus Viewer access to the private Shared Drive screenshot folder so the review queue can stream uploaded images. Never put either secret, a service-account JSON, `.dev.vars`, `.env`, workbook export, or user export in this directory or a deployment bundle.
 
 The campaign proxy also requires the encrypted `UPLOADER_ADMIN_API_KEY` Pages
 secret. Its matching `ADMIN_API_KEY` is configured on Cloud Run. Neither value
