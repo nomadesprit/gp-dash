@@ -1,5 +1,5 @@
 import { DASHBOARD_CACHE_VERSION, resolvePrivateSources } from '../../lib/source-config.js';
-import { buildReviewSnapshot, planReviewDecision } from '../../lib/reviews.js';
+import { buildReviewSnapshot, planReviewDecision, planReviewUndo } from '../../lib/reviews.js';
 import {
   jsonNoStore, reviewAccessToken, reviewAuthorized, reviewHostAllowed, reviewSheetRows,
   sameOriginWrite, writeReviewDecision,
@@ -28,11 +28,14 @@ export async function onRequestPost(context) {
     const source = resolvePrivateSources(context.env.PRIVATE_SOURCE_IDS_JSON).campaign;
     const token = await reviewAccessToken(context.env.GOOGLE_SERVICE_ACCOUNT_JSON);
     const snapshot = buildReviewSnapshot(await reviewSheetRows(source.id, token));
-    const plan = planReviewDecision(snapshot, {
+    const planInput = {
       ...input,
       reviewerEmail: context.request.headers.get('cf-access-authenticated-user-email'),
       reviewedAt: new Date().toISOString(),
-    });
+    };
+    const plan = input?.decision === 'undo'
+      ? planReviewUndo(snapshot, planInput)
+      : planReviewDecision(snapshot, planInput);
     await writeReviewDecision(source.id, token, plan);
     const cacheUrl = new URL('/api/dashboard', context.request.url);
     cacheUrl.searchParams.set('cache', DASHBOARD_CACHE_VERSION);
@@ -41,6 +44,7 @@ export async function onRequestPost(context) {
     });
     return jsonNoStore({
       ok: true,
+      reviewId: plan.reviewId,
       decision: plan.decision,
       status: plan.status,
       rewardEligible: plan.rewardEligible,
@@ -49,7 +53,7 @@ export async function onRequestPost(context) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Review could not be saved.';
-    const expected = /not found|already been reviewed|must be|characters or fewer/i.test(message);
+    const expected = /not found|already been reviewed|already been undone|cannot be undone|must be|characters or fewer/i.test(message);
     console.error('review_action_error', { name: error?.name, message });
     return jsonNoStore({ error: expected ? message : 'Review could not be saved.' }, expected ? 409 : 503);
   }

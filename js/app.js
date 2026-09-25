@@ -7,6 +7,7 @@ import { applyMinimumWeeklyDownloads } from './adapters/volume.js';
 import { toCsv } from './campaign-files.js';
 import { countryName } from './normalization.js';
 import { campaignProgress, mixedForecast, percentage, sum } from './calculations.js?v=20260812-forecast-3';
+import { formatDashboardDate, formatDashboardDateTime } from './date-format.js';
 
 const $ = selector => document.querySelector(selector);
 const presentNumber = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -34,6 +35,7 @@ const state = {
     campaigns: [],
     items: [],
     busyReviewId: '',
+    undo: null,
   },
 };
 
@@ -143,7 +145,7 @@ function renderOverview(records, scope) {
   const popup = popupSummary(records);
   const acceptedRate = percentage(popup.accepted, popup.show);
   const sourcePeriod = records[0]?.points.at(-1)?.label || state.filters.period;
-  const dailyThrough = state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown';
+  const dailyThrough = formatDashboardDate(state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown');
   const popupStatus = state.data.sourceMetadata?.popup?.status || 'unknown';
   const campaignConnected = state.data.mode === 'live-private-sheet-api' && Boolean(state.data.campaignTracker?.connected);
   const volumeLabel = Number(state.filters.minWeeklyDownloads) === 0 ? 'All volume levels' : `${formatInt(state.filters.minWeeklyDownloads)}+ / week`;
@@ -177,7 +179,7 @@ function tableRow(record) {
   const deltaClass = record.delta > .0005 ? 'up' : record.delta < -.0005 ? 'down' : 'flat';
   const delta = Number.isFinite(record.delta) ? `${record.delta > 0 ? '+' : ''}${record.delta.toFixed(3)}` : '—';
   const gap = Math.max(0, state.filters.target - record.current);
-  const quality = popup ? `Popup undated · redirects to ${state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown'}` : 'Popup country sample absent';
+  const quality = popup ? `Popup undated · redirects to ${formatDashboardDate(state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown')}` : 'Popup country sample absent';
   const campaignEmpty = state.data.mode === 'live-private-sheet-api'
     ? '<span class="metric-main">No live campaign</span><span class="submetric">Tracker connected · no production rows</span>'
     : '<span class="metric-main">Campaign source unavailable</span><span class="submetric">Synthetic demo mode</span>';
@@ -185,7 +187,7 @@ function tableRow(record) {
     <td class="country-cell"><strong>${esc(countryName(record.countryCode))} <span class="submetric">${record.countryCode}</span></strong><small>${record.store === 'GooglePlay' ? 'Google Play' : 'App Store'}</small></td>
     <td><span class="rating-value ${below ? 'below' : ''}">${formatSourceRating(record.current)}</span><span class="delta ${deltaClass}">${delta}</span><span class="submetric">${esc(record.sourcePeriod)}</span></td>
     <td><span class="metric-main">${gap ? `−${gap.toFixed(3)}` : 'On / above'}</span><span class="submetric">to ${Number(state.filters.target).toFixed(2)}</span></td>
-    <td>${Number.isFinite(volume?.weeklyDownloads) ? `<span class="metric-main">${volume.weeklyDownloadsExact ? '' : '≈ '}${formatInt(volume.weeklyDownloads)}</span><span class="submetric">${volume.weeklyDownloadsExact ? '7-day total' : 'MTD run-rate'} · through ${esc(volume.asOfDate || 'unknown')}</span>` : '<span class="metric-main">—</span><span class="submetric">Volume unavailable</span>'}</td>
+    <td>${Number.isFinite(volume?.weeklyDownloads) ? `<span class="metric-main">${volume.weeklyDownloadsExact ? '' : '≈ '}${formatInt(volume.weeklyDownloads)}</span><span class="submetric">${volume.weeklyDownloadsExact ? '7-day total' : 'MTD run-rate'} · through ${esc(formatDashboardDate(volume.asOfDate || 'unknown'))}</span>` : '<span class="metric-main">—</span><span class="submetric">Volume unavailable</span>'}</td>
     <td>${popup ? `<span class="metric-main">${formatInt(popup.accepted)} redirects</span><span class="submetric">${formatRate(popup.acceptanceRate)} of ${formatInt(popup.show)} shown · n=${formatInt(popup.popupSentimentSample)} rated</span>` : '<span class="metric-main">—</span><span class="submetric">No country sample</span>'}</td>
     <td>${campaigns.length ? `<span class="badge neutral">${esc(campaigns.at(-1).localOnly ? 'Local draft' : campaigns.at(-1).status || 'Tracked')}</span><span class="submetric">Audience ${formatInt(sum(campaigns, 'audience_size'))} · evidence ${formatInt(sum(campaigns, 'evidence_submissions'))}</span>` : campaignEmpty}</td>
     <td><span class="badge ${forecastState === 'assumption-driven' ? 'assumption' : forecastState === 'ready' ? 'ready' : 'neutral'}">${esc(forecastState)}</span><span class="submetric">${forecastState === 'unavailable' ? 'Effective count missing' : 'Editable assumptions'}</span></td>
@@ -256,7 +258,7 @@ function renderFeedback(record) {
     <div><strong>${formatInt(feedback.ticketCount)}</strong><span>tickets</span></div>
     <div><strong>${formatRating(feedback.averageStar)}</strong><span>average in-ticket star</span></div>
     <div><strong>${formatRate(lowShare)}</strong><span>0–1 star share</span></div>
-  </div><p class="explain">All platforms · ${esc(feedback.firstAt?.slice(0, 10) || '—')} to ${esc(feedback.lastAt?.slice(0, 10) || '—')}${languages ? ` · ${esc(languages)}` : ''}. Aggregated operational signal only; raw IDs and text are excluded.</p>`;
+  </div><p class="explain">All platforms · ${esc(formatDashboardDate(feedback.firstAt || '—'))} to ${esc(formatDashboardDate(feedback.lastAt || '—'))}${languages ? ` · ${esc(languages)}` : ''}. Aggregated operational signal only; raw IDs and text are excluded.</p>`;
 }
 
 function renderCampaignFunnel(record) {
@@ -406,7 +408,7 @@ function renderCampaigns() {
       const progressWidth = Number.isFinite(forecast.completionRate) ? Math.max(0, Math.min(100, forecast.completionRate * 100)) : 0;
       return `<article class="campaign-record">
         <div class="panel-heading"><h3>${esc(campaign.name || campaign.campaign_id)}</h3><span class="badge ${forecast.state === 'observed-pace' ? 'assumption' : 'neutral'}">${campaign.localOnly ? 'Local draft' : esc(campaign.status || 'Tracked')}</span></div>
-        <p>${campaign.countryCode ? `${esc(countryName(campaign.countryCode))} · ` : ''}${esc(campaign.start_date || 'No start')} → ${esc(campaign.end_date || 'No end')} · ${pace}</p>
+        <p>${campaign.countryCode ? `${esc(countryName(campaign.countryCode))} · ` : ''}${esc(formatDashboardDate(campaign.start_date || 'No start'))} → ${esc(formatDashboardDate(campaign.end_date || 'No end'))} · ${pace}</p>
         <div class="campaign-metrics">
           <div><strong>${formatInt(campaign.audience_size)}</strong><span>audience</span></div>
           <div><strong>${formatInt(campaign.evidence_submissions)}</strong><span>submitted evidence</span></div>
@@ -430,7 +432,7 @@ function renderCampaigns() {
       const progressWidth = audience ? Math.max(0, Math.min(100, submitted / audience * 100)) : 0;
       return `<article class="campaign-record">
         <div class="panel-heading"><h3>${esc(campaign.name || campaign.campaign_id)}</h3><span class="badge neutral">Internal test · ${esc(campaign.status || 'tracked')}</span></div>
-        <p>${esc(campaign.start_date || 'No start')} → ${esc(campaign.end_date || 'No end')} · TEST country · upload evidence only</p>
+        <p>${esc(formatDashboardDate(campaign.start_date || 'No start'))} → ${esc(formatDashboardDate(campaign.end_date || 'No end'))} · TEST country · upload evidence only</p>
         <div class="campaign-metrics">
           <div><strong>${formatInt(audience)}</strong><span>links prepared</span></div>
           <div><strong>${formatInt(submitted)}</strong><span>screenshots sent</span></div>
@@ -443,7 +445,7 @@ function renderCampaigns() {
     }).join('');
   }
   const series = dailyRedirectSeries(scopedRecords());
-  $('#redirect-source-period').textContent = `Through ${state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown'} · current filter scope`;
+  $('#redirect-source-period').textContent = `Through ${formatDashboardDate(state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown')} · current filter scope`;
   if (!series.length) {
     $('#redirect-trend').innerHTML = '<div class="empty">No daily redirects match the current brand, store, country, and volume scope.</div>';
     return;
@@ -453,9 +455,9 @@ function renderCampaigns() {
   const x = index => pad + (index / Math.max(1, series.length - 1)) * (width - pad * 2);
   const y = value => height - pad - (value / max) * (height - pad * 2);
   const points = series.map((item, index) => `${x(index)},${y(item.redirects)}`).join(' ');
-  const dots = series.map((item, index) => `<circle cx="${x(index)}" cy="${y(item.redirects)}" r="2"><title>${item.date}: ${formatInt(item.redirects)} redirects</title></circle>`).join('');
+  const dots = series.map((item, index) => `<circle cx="${x(index)}" cy="${y(item.redirects)}" r="2"><title>${formatDashboardDate(item.date)}: ${formatInt(item.redirects)} redirects</title></circle>`).join('');
   const total = series.reduce((sumValue, item) => sumValue + item.redirects, 0);
-  $('#redirect-trend').innerHTML = `<svg class="redirect-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="${formatInt(total)} daily store redirects from ${series[0].date} through ${series.at(-1).date} in the current filtered scope"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line><polyline points="${points}"></polyline>${dots}</svg><div class="chart-labels"><span>${series[0].date}</span><span>${formatInt(total)} total redirects</span><span>${series.at(-1).date}</span></div>`;
+  $('#redirect-trend').innerHTML = `<svg class="redirect-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="${formatInt(total)} daily store redirects from ${formatDashboardDate(series[0].date)} through ${formatDashboardDate(series.at(-1).date)} in the current filtered scope"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line><polyline points="${points}"></polyline>${dots}</svg><div class="chart-labels"><span>${formatDashboardDate(series[0].date)}</span><span>${formatInt(total)} total redirects</span><span>${formatDashboardDate(series.at(-1).date)}</span></div>`;
 }
 
 function reviewCampaign() {
@@ -464,8 +466,7 @@ function reviewCampaign() {
 
 function reviewDate(value) {
   if (!value) return 'Unknown';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatDashboardDateTime(value);
 }
 
 async function responseJson(response) {
@@ -515,14 +516,17 @@ function renderReviews() {
   ].map(item => `<div class="progress-kpi"><span>${item.label}</span><strong>${formatInt(item.value)}</strong><small>${item.note}</small></div>`).join('');
 
   download.disabled = !campaign || campaign.pending > 0 || campaign.approved < 1;
-  status.className = `campaign-prepare-status${state.reviews.message ? ' success' : ''}`;
-  status.textContent = state.reviews.message || (campaign
+  const statusMessage = state.reviews.message || (campaign
     ? campaign.pending > 0
       ? `${formatInt(campaign.pending)} submission${campaign.pending === 1 ? '' : 's'} still need${campaign.pending === 1 ? 's' : ''} review. The reward CSV unlocks when the pending count reaches zero.`
       : campaign.approved > 0
         ? 'Review is complete. The approved USERID CSV is ready to download.'
         : 'Review is complete. No users were approved for a reward.'
     : 'No screenshots have been submitted for review yet.');
+  status.className = `campaign-prepare-status${state.reviews.message ? ' success' : ''}${state.reviews.undo ? ' review-undo-status' : ''}`;
+  status.innerHTML = state.reviews.undo
+    ? `<span>${esc(statusMessage)}</span><button class="secondary-button" type="button" data-review-undo ${state.reviews.busyReviewId ? 'disabled' : ''}>Undo last decision</button>`
+    : esc(statusMessage);
 
   if (!selectedItems.length) {
     queue.innerHTML = `<div class="empty">${campaign ? 'No pending screenshots for this campaign.' : 'The queue will appear here after a participant uploads a screenshot.'}</div>`;
@@ -674,6 +678,15 @@ function updateCampaignAfterReview(result) {
   renderCampaigns();
 }
 
+function updateCampaignAfterUndo(undo) {
+  const campaign = state.data?.campaigns?.find(row => row.campaign_id === undo.campaignId);
+  if (!campaign) return;
+  campaign.pending_review = (Number(campaign.pending_review) || 0) + 1;
+  if (undo.decision === 'approve') campaign.approved = Math.max(0, (Number(campaign.approved) || 0) - 1);
+  else campaign.rejected = Math.max(0, (Number(campaign.rejected) || 0) - 1);
+  renderCampaigns();
+}
+
 function visibleReviewCard() {
   const visible = card => {
     const rect = card.getBoundingClientRect();
@@ -704,10 +717,6 @@ async function submitReview(button) {
   const decision = button.dataset.reviewAction;
   const card = button.closest('[data-review-card]');
   const notes = card?.querySelector('[data-review-notes]')?.value.trim() || '';
-  const prompt = decision === 'approve'
-    ? 'Approve this participant for a reward and permanently block them from future campaigns?'
-    : 'Reject this screenshot and allow the participant to upload again before the link expires?';
-  if (!window.confirm(prompt)) return;
   state.reviews.busyReviewId = reviewId;
   renderReviews();
   try {
@@ -718,11 +727,37 @@ async function submitReview(button) {
     const payload = await responseJson(response);
     if (!response.ok) throw new Error(payload.error || `Review API returned ${response.status}`);
     updateCampaignAfterReview(payload);
+    state.reviews.undo = { reviewId, decision, userId: payload.userId, campaignId: payload.campaignId };
     await loadReviewQueue(decision === 'approve'
       ? `User ${payload.userId} approved and added to reward eligibility.`
       : `User ${payload.userId} rejected and can retry with the same active link.`);
   } catch (error) {
     state.reviews.error = `Review was not saved: ${error.message}`;
+  } finally {
+    state.reviews.busyReviewId = '';
+    state.reviews.loading = false;
+    renderReviews();
+  }
+}
+
+async function undoReviewDecision(button) {
+  const undo = state.reviews.undo;
+  if (!undo || state.reviews.busyReviewId) return;
+  state.reviews.busyReviewId = undo.reviewId;
+  button.disabled = true;
+  button.textContent = 'Undoing…';
+  try {
+    const response = await fetch('/api/reviews/action', {
+      method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reviewId: undo.reviewId, decision: 'undo' }),
+    });
+    const payload = await responseJson(response);
+    if (!response.ok) throw new Error(payload.error || `Review API returned ${response.status}`);
+    updateCampaignAfterUndo(undo);
+    state.reviews.undo = null;
+    await loadReviewQueue(`Decision for user ${payload.userId} was undone and returned to the review queue.`);
+  } catch (error) {
+    state.reviews.error = `Review decision was not undone: ${error.message}`;
   } finally {
     state.reviews.busyReviewId = '';
     state.reviews.loading = false;
@@ -766,8 +801,8 @@ function renderQuality() {
   const unmapped = state.data.unmapped;
   const meta = state.data.snapshotMetadata;
   const sources = state.data.sourceMetadata || {};
-  const dailyThrough = sources.popup?.dailyRedirectThrough || 'unknown';
-  const downloadThrough = latestString(state.data.volumeRecords.map(row => row.asOfDate)) || 'unknown';
+  const dailyThrough = formatDashboardDate(sources.popup?.dailyRedirectThrough || 'unknown');
+  const downloadThrough = formatDashboardDate(latestString(state.data.volumeRecords.map(row => row.asOfDate)) || 'unknown');
   const registryRows = state.data.campaignTracker?.productionCampaignRegistryRows ?? state.data.campaignTracker?.campaignRegistryRows ?? 0;
   const testRegistryRows = state.data.campaignTracker?.testCampaignRegistryRows || 0;
   const registryConnected = Boolean(state.data.campaignTracker?.registryConnected || sources.campaign?.registryConnected);
@@ -780,10 +815,10 @@ function renderQuality() {
     <div class="quality-item"><strong>Country normalization</strong>${unmapped.length ? `${unmapped.length} unmapped source values: ${esc(unmapped.join(', '))}. Their aggregates are excluded from country joins but remain visible here.` : 'No source countries are unmapped. Known aliases include Viet Nam/Vietnam and Venezuela variants.'}</div>
     <div class="quality-item"><strong>Rating weight</strong>Per-country/store effective rating counts are absent. Overall rating is explicitly unweighted and forecasts begin unavailable.</div>
     <div class="quality-item"><strong>Download volume</strong>Weekly values are run-rate estimates from month-to-date Google Play new installs through ${esc(downloadThrough)}. Missing volume is excluded only when the minimum is above zero.</div>
-    <div class="quality-item"><strong>Freshness</strong>AppFollow is expected every Friday and its latest available source period is ${esc(sources.appFollow?.latestPeriod || state.data.ratingData.periods.at(-1) || 'unknown')}. Popup is manually updated monthly, but raw popup rows remain an undated snapshot and daily redirects end ${esc(dailyThrough)}. Download volume is dated through ${esc(sources.volume?.dataThrough || downloadThrough)}. Permission-change timestamps are not treated as evidence refresh dates, and mismatched periods are never presented as historical comparisons.</div>
+    <div class="quality-item"><strong>Freshness</strong>AppFollow is expected every Friday and its latest available source period is ${esc(sources.appFollow?.latestPeriod || state.data.ratingData.periods.at(-1) || 'unknown')}. Popup is manually updated monthly, but raw popup rows remain an undated snapshot and daily redirects end ${esc(dailyThrough)}. Download volume is dated through ${esc(formatDashboardDate(sources.volume?.dataThrough || downloadThrough))}. Permission-change timestamps are not treated as evidence refresh dates, and mismatched periods are never presented as historical comparisons.</div>
     <div class="quality-item"><strong>Popup semantics</strong>Accepted means store redirect. Popup star distributions are sentiment signals, not external-store reviews.</div>
     <div class="quality-item"><strong>Popup summary cross-check</strong>${popupCrossCheck} Scoped KPIs use raw rows for consistent country and volume filtering.</div>
-    <div class="quality-item"><strong>Campaign source</strong>${state.data.mode === 'live-private-sheet-api' ? 'Live private tracker aggregates were refreshed' : 'Synthetic demo data is active'} ${esc(state.data.campaignTracker?.generatedAt || 'at an unknown time')}. Current smoke-test and unassigned rows are excluded; no production outcomes are invented.</div>
+    <div class="quality-item"><strong>Campaign source</strong>${state.data.mode === 'live-private-sheet-api' ? 'Live private tracker aggregates were refreshed' : 'Synthetic demo data is active'} ${esc(formatDashboardDateTime(state.data.campaignTracker?.generatedAt || 'at an unknown time'))}. Current smoke-test and unassigned rows are excluded; no production outcomes are invented.</div>
     <div class="quality-item"><strong>Campaign privacy</strong>The analytics API excludes user IDs, token hashes, submission or claim IDs, Drive file IDs, screenshot URLs, images, and review notes. The Access-protected review API exposes only the selected queue context and streams images without revealing Drive identifiers. Screenshots remain in the private evidence store and are configured for ${formatInt(state.data.campaignTracker?.retentionDays || 90)}-day retention.</div>
     <div class="quality-item"><strong>Campaign country join</strong>${registryConnected ? `The privacy-safe Campaigns registry is connected with ${formatInt(registryRows)} production row${registryRows === 1 ? '' : 's'} and ${formatInt(testRegistryRows)} internal test row${testRegistryRows === 1 ? '' : 's'}. Test cohort rows are shown separately and do not affect country ratings or production campaign totals.` : 'The fallback snapshot predates the Campaigns registry; live mode is required for current campaign joins.'}</div>
     <div class="quality-item"><strong>Participation evidence</strong>An approved screenshot establishes reward eligibility for this workflow. Reviewers must ignore rating value or sentiment; approval is not automatically a verified external-store rating.</div>
@@ -798,7 +833,7 @@ function renderFreshnessNotice() {
     .flatMap(record => record.points)
     .filter(point => point.period === appLatestPeriod)
     .map(point => `${String(point.order).padStart(3, '0')}|${point.label}`))?.split('|').slice(1).join('|') || appLatestPeriod;
-  const dailyThrough = sources.popup?.dailyRedirectThrough || 'unknown';
+  const dailyThrough = formatDashboardDate(sources.popup?.dailyRedirectThrough || 'unknown');
   const modeLead = state.data.mode === 'live-private-sheet-api'
     ? '<strong>Live source cadence and freshness:</strong>'
     : `<strong>Synthetic demo mode:</strong> The live private source API was unavailable (${esc(state.data.reason || 'unknown reason')}). Demo values are invented and are not source evidence.`;
@@ -870,6 +905,10 @@ function bindEvents() {
   $('#review-campaign').addEventListener('change', event => { state.reviews.selectedCampaign = event.target.value; state.reviews.message = ''; renderReviews(); });
   $('#refresh-reviews').addEventListener('click', () => loadReviewQueue());
   $('#download-approved').addEventListener('click', downloadApprovedUsers);
+  $('#review-status').addEventListener('click', event => {
+    const button = event.target.closest('[data-review-undo]');
+    if (button) undoReviewDecision(button);
+  });
   $('#review-queue').addEventListener('click', event => {
     const retry = event.target.closest('[data-review-image-retry]');
     if (retry) return retryReviewImage(retry);
@@ -923,7 +962,7 @@ function validateCampaignId() {
 
 function buildCampaignMessage() {
   const code = $('#draft-country').value;
-  const dates = [$('#draft-start').value || '[start date]', $('#draft-end').value || '[end date]'];
+  const dates = [$('#draft-start').value || '[start date]', $('#draft-end').value || '[end date]'].map(formatDashboardDate);
   $('#campaign-message').value = `Campaign: ${$('#draft-name').value.trim() || 'Rating-neutral feedback campaign'}\nCountry: ${countryName(code)} (${code})\nPeriod: ${dates[0]} to ${dates[1]}\n\nInvite eligible users to share honest product feedback. If they independently choose to leave a store rating or review, participation, support, and any reward eligibility must not depend on doing so, on its star value, or on whether it is positive or negative.\n\nProvide each participant only their unique secure screenshot-upload link issued by the campaign service. Do not share the base uploader URL as a substitute for a secure link.\n\nAudience file: ${state.currentUniqueIdCount ? `${state.currentUniqueIdCount.toLocaleString()} unique IDs ready for eligibility checking` : '[upload Metabase USERID CSV]'}. IDs are sent only when an operator prepares the campaign and are not stored in the dashboard.`;
 }
 
