@@ -11,6 +11,7 @@ import {
 import {
   GOOGLE_JWT_GRANT_TYPE, reviewAuthorized, reviewHostAllowed, sameOriginWrite,
 } from '../functions/lib/google-review.js';
+import { readFile } from 'node:fs/promises';
 
 const row = (columns, values) => columns.map(column => values[column] ?? '');
 
@@ -84,6 +85,18 @@ test('review APIs require the production host and a Cloudflare Access identity',
 
 test('review API uses the standard Google JWT bearer grant type', () => {
   assert.equal(GOOGLE_JWT_GRANT_TYPE, 'urn:ietf:params:oauth:grant-type:jwt-bearer');
+});
+
+test('review preview fails closed and reports unsupported stored file types', async () => {
+  const [app, imageApi] = await Promise.all([
+    readFile(new URL('../js/app.js', import.meta.url), 'utf8'),
+    readFile(new URL('../functions/api/reviews/image.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(app, /data-review-image-error/);
+  assert.match(app, /data-review-image-retry/);
+  assert.match(app, /review-approve[^>]+disabled/);
+  assert.match(imageApi, /DISPLAYABLE_IMAGE_TYPES/);
+  assert.match(imageApi, /supported image.*415/s);
 });
 
 test('review writes accept only the same browser origin', () => {
