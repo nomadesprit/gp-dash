@@ -531,8 +531,16 @@ function renderReviews() {
     const busy = state.reviews.busyReviewId === item.reviewId;
     return `<article class="review-card" data-review-card="${esc(item.reviewId)}" tabindex="0" aria-label="Review screenshot for user ${esc(item.userId)}. Press Right Arrow to approve or Left Arrow to reject.">
       <div class="review-image">${item.imageUrl
-        ? `<img src="${esc(item.imageUrl)}" alt="Submitted evidence for user ${esc(item.userId)}" loading="lazy">`
-        : '<div class="empty">Screenshot file is unavailable.</div>'}</div>
+        ? `<img src="${esc(item.imageUrl)}" alt="Submitted evidence for user ${esc(item.userId)}" loading="lazy" data-review-image>
+          <div class="review-image-error" data-review-image-error hidden>
+            <strong>Screenshot preview unavailable</strong>
+            <span>The dashboard cannot read this private Drive file yet. Fix its Shared Drive access, then retry.</span>
+            <button class="secondary-button" type="button" data-review-image-retry>Retry preview</button>
+          </div>`
+        : `<div class="review-image-error">
+            <strong>Screenshot file unavailable</strong>
+            <span>No Drive file was recorded for this submission. Reject it to let the participant retry.</span>
+          </div>`}</div>
       <div class="review-details">
         <div class="panel-heading"><h3>${esc(item.campaignName)}</h3><span class="badge assumption">Pending review</span></div>
         <div class="review-meta">
@@ -543,12 +551,37 @@ function renderReviews() {
         </div>
         <label>Review notes<textarea data-review-notes maxlength="1000" placeholder="Optional for approval; explain what must change when rejecting."></textarea></label>
         <div class="review-actions">
-          <button class="primary-button review-approve" type="button" aria-keyshortcuts="ArrowRight" title="Keyboard shortcut: Right Arrow" data-review-action="approve" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : 'Approve for reward <span class="key-hint" aria-hidden="true">→</span>'}</button>
+          <button class="primary-button review-approve" type="button" aria-keyshortcuts="ArrowRight" title="Keyboard shortcut: Right Arrow" data-review-action="approve" data-review-id="${esc(item.reviewId)}" disabled>${busy ? 'Saving…' : 'Approve for reward <span class="key-hint" aria-hidden="true">→</span>'}</button>
           <button class="secondary-button review-reject" type="button" aria-keyshortcuts="ArrowLeft" title="Keyboard shortcut: Left Arrow" data-review-action="reject" data-review-id="${esc(item.reviewId)}" ${busy ? 'disabled' : ''}><span class="key-hint" aria-hidden="true">←</span> Reject &amp; allow retry</button>
         </div>
       </div>
     </article>`;
   }).join('');
+}
+
+function setReviewImageState(image, ready) {
+  const card = image.closest('[data-review-card]');
+  const error = card?.querySelector('[data-review-image-error]');
+  const approve = card?.querySelector('[data-review-action="approve"]');
+  image.hidden = !ready;
+  if (error) error.hidden = ready;
+  if (approve) approve.disabled = !ready || state.reviews.busyReviewId === card.dataset.reviewCard;
+}
+
+function handleReviewImageEvent(event) {
+  const image = event.target.closest?.('[data-review-image]');
+  if (image) setReviewImageState(image, event.type === 'load');
+}
+
+function retryReviewImage(button) {
+  const card = button.closest('[data-review-card]');
+  const image = card?.querySelector('[data-review-image]');
+  if (!image) return;
+  button.disabled = true;
+  button.textContent = 'Retrying…';
+  const retryUrl = new URL(image.src, window.location.href);
+  retryUrl.searchParams.set('retry', Date.now().toString());
+  image.src = retryUrl.toString();
 }
 
 async function loadReviewQueue(message = '') {
@@ -777,9 +810,13 @@ function bindEvents() {
   $('#refresh-reviews').addEventListener('click', () => loadReviewQueue());
   $('#download-approved').addEventListener('click', downloadApprovedUsers);
   $('#review-queue').addEventListener('click', event => {
+    const retry = event.target.closest('[data-review-image-retry]');
+    if (retry) return retryReviewImage(retry);
     const button = event.target.closest('[data-review-action]');
     if (button) submitReview(button);
   });
+  $('#review-queue').addEventListener('load', handleReviewImageEvent, true);
+  $('#review-queue').addEventListener('error', handleReviewImageEvent, true);
   document.addEventListener('keydown', handleReviewShortcut);
 }
 
