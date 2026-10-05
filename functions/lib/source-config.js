@@ -3,22 +3,21 @@
 // PRIVATE_SOURCE_IDS_JSON Pages secret and are never committed or sent to the browser.
 const SOURCE_RULES = {
   appFollow: {
-    appsRange: "'Apps'!A1:D1000",
+    appsRange: "'Apps'!A:D",
     monthPattern: /^[A-Z][a-z]+ \d{4}$/,
     cadence: 'Weekly · expected Friday',
     warningAfterDays: 10,
   },
   popup: {
-    rawRange: "'raw data'!A1:T1000",
-    ratesRange: "'Rates by Country'!A1:H1000",
-    summaryRange: "'rate us stats'!A1:T1000",
-    feedbackRange: "'feedback tickets'!B1:H1000",
-    dailyPrefix: 'Daily count of users redirected to store',
+    rawRange: "'raw data'!A:T",
+    ratesRange: "'Rates by Country'!A:H",
+    summaryRange: "'rate us stats'!A:T",
+    feedbackRange: "'feedback tickets'!B:H",
     cadence: 'Monthly · manual update',
     warningAfterDays: 45,
   },
   volume: {
-    cacheRange: "'ratings_cache'!A1:H1000",
+    cacheRange: "'ratings_cache'!A:H",
     cadence: 'Weekly cache',
     warningAfterDays: 10,
   },
@@ -44,4 +43,4 @@ export function resolvePrivateSources(secretValue) {
 }
 
 export const SOURCE_CACHE_SECONDS = 900;
-export const DASHBOARD_CACHE_VERSION = 'test-cohort-v1';
+export const DASHBOARD_CACHE_VERSION = 'source-coverage-v2';

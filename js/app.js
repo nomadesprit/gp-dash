@@ -149,17 +149,17 @@ function renderOverview(records, scope) {
   const acceptedRate = percentage(popup.accepted, popup.show);
   const sourcePeriod = records[0]?.points.at(-1)?.label || state.filters.period;
   const dailyThrough = formatDashboardDate(state.data.sourceMetadata?.popup?.dailyRedirectThrough || 'unknown');
-  const popupStatus = state.data.sourceMetadata?.popup?.status || 'unknown';
+  const popupStatus = state.data.sourceMetadata?.popup?.dailyRedirectFreshness?.status || state.data.sourceMetadata?.popup?.status || 'unknown';
   const campaignConnected = state.data.mode === 'live-private-sheet-api' && Boolean(state.data.campaignTracker?.connected);
   const volumeLabel = Number(state.filters.minWeeklyDownloads) === 0 ? 'All volume levels' : `${formatInt(state.filters.minWeeklyDownloads)}+ / week`;
   const cards = [
     { value: below.length, label: 'Countries below target', meta: `${records.length} volume-qualified rows`, attention: below.length > 0 },
     { value: formatRating(mean), label: 'Unweighted mean rating', meta: 'Review counts unavailable; not weighted' },
-    { value: esc(sourcePeriod || '—'), label: 'Latest AppFollow period', meta: 'Rightmost non-empty weekly value' },
+    { value: esc(sourcePeriod || '—'), label: 'Displayed AppFollow period', meta: 'Rightmost non-empty weekly value' },
     { value: formatInt(popup.accepted), label: 'Popup store redirects', meta: Number(state.filters.minWeeklyDownloads) > 0 ? 'Volume-filtered joined samples' : 'Accepted ≠ verified store rating' },
     { value: formatRate(acceptedRate), label: 'Popup acceptance rate', meta: `${formatInt(popup.show)} users shown` },
     { value: campaignConnected ? state.data.campaigns.filter(campaign => !isTestCampaign(campaign) && campaign.status === 'active').length : '—', label: 'Active campaigns', meta: campaignConnected ? 'Screenshot tracker connected' : 'Source unavailable in demo mode' },
-    { value: popupStatus === 'stale' ? 'Popup stale' : 'Mismatch', label: 'Data freshness', meta: `Popup redirects through ${dailyThrough}`, attention: true },
+    { value: popupStatus === 'stale' ? 'Redirects stale' : 'Mixed periods', label: 'Data freshness', meta: `Popup redirects through ${dailyThrough}`, attention: true },
   ];
   $('#kpi-grid').innerHTML = cards.map(card => `<article class="kpi ${card.attention ? 'attention' : ''}"><span class="label">${card.label}</span><span class="value">${card.value}</span><span class="meta">${card.meta}</span></article>`).join('');
   $('#scope-note').textContent = `${state.filters.brand} · ${state.filters.store === 'GooglePlay' ? 'Google Play' : 'App Store'} · target ${threshold.toFixed(2)} · ${volumeLabel}`;
@@ -923,8 +923,11 @@ function renderFreshnessNotice() {
   const modeLead = state.data.mode === 'live-private-sheet-api'
     ? '<strong>Live source cadence and freshness:</strong>'
     : `<strong>Synthetic demo mode:</strong> The live private source API was unavailable (${esc(state.data.reason || 'unknown reason')}). Demo values are invented and are not source evidence.`;
-  const popupState = sources.popup?.status === 'stale' ? ' <strong>The popup workbook is beyond its 45-day monthly-update window.</strong>' : '';
-  $('#freshness-notice').innerHTML = `${modeLead} AppFollow is expected weekly on Friday and is available through ${esc(appPoint)}; the popup workbook is manually updated monthly, its raw snapshot has no event date, and daily redirects end ${esc(dailyThrough)}.${popupState} These sources are not presented as same-period historical evidence when their dates differ.`;
+  const popupState = sources.popup?.dailyRedirectFreshness?.status === 'stale' ? ' <strong>Daily redirects are beyond the 45-day monthly-update window.</strong>' : '';
+  const workbookUpdates = state.data.mode === 'live-private-sheet-api'
+    ? ` Workbook last modified: AppFollow ${esc(formatDashboardDate(sources.appFollow?.fileModifiedTime))}; popup ${esc(formatDashboardDate(sources.popup?.fileModifiedTime))}. File modification dates do not establish the observation date of undated rows.`
+    : '';
+  $('#freshness-notice').innerHTML = `${modeLead} AppFollow is expected weekly on Friday and is available through ${esc(appPoint)}; the popup workbook is manually updated monthly, its raw snapshot has no event date, and daily redirects end ${esc(dailyThrough)}.${popupState} These sources are not presented as same-period historical evidence when their dates differ.${workbookUpdates}`;
 }
 
 function render() {

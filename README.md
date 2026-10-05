@@ -13,7 +13,7 @@ npm run serve
 
 Open `http://localhost:4173`. A plain static server cannot execute the Pages Function, so the browser visibly falls back to a small synthetic demo fixture. Every demo value is invented test data and is labeled as such; no workbook-derived fallback payload is committed.
 
-The automated suite currently has 47 tests covering:
+The automated suite covers:
 
 - rightmost AppFollow weekly values and cross-month history;
 - period, country, threshold, volume, and ISO-normalization calculations;
@@ -26,7 +26,7 @@ The automated suite currently has 47 tests covering:
 
 ## Production source architecture
 
-The browser calls the same-origin `GET /api/dashboard`. A Cloudflare Pages Function authenticates to Google with the encrypted `GOOGLE_SERVICE_ACCOUNT_JSON` secret, reads fixed bounded ranges, sanitizes/aggregates the result, and caches the safe response for 15 minutes.
+The browser calls the same-origin `GET /api/dashboard`. A Cloudflare Pages Function authenticates to Google with the encrypted `GOOGLE_SERVICE_ACCOUNT_JSON` secret, reads approved columns without fixed row cutoffs, sanitizes/aggregates the result, and caches the safe response for 15 minutes.
 
 Live responses are restricted to the Access-protected production hostname. Immutable Pages preview hostnames return 404 for `/api/dashboard`. Spreadsheet IDs and the credential are encrypted Pages secrets; no Google credential, fixed workbook identifier, raw user ID, token hash, file ID, screenshot URL, review note, or private source URL is committed or present in browser configuration.
 
@@ -47,7 +47,7 @@ Key files:
 
 ### AppFollow
 
-All monthly tabs matching `Month YYYY` are loaded, currently January 2025 through August 2026. The current rating is the rightmost non-empty weekly value for each app/store/GEO row. The `Apps` tab is also read as the mapping contract.
+All monthly tabs matching `Month YYYY` are loaded. Initial load and Reset defaults select the latest available period rather than a fixed historical month. The current rating is the rightmost non-empty weekly value for each app/store/GEO row. The `Apps` tab is also read as the mapping contract.
 
 The operational expectation is one update every Friday. Freshness is shown from the latest available AppFollow period/weekly column, not from Google Drive `modifiedTime`, because permission changes can advance the file timestamp without changing rating data.
 
@@ -58,10 +58,10 @@ Production reads the whole decision-relevant workbook surface:
 - `raw data` for country/store/segment funnels and popup sentiment;
 - `rate us stats` for the high-level pivot cross-check;
 - `Rates by Country` for popup-related star distributions;
-- every `Daily count of users redirected to store ...` tab for the redirect trend;
+- every tab whose first five column headers match the daily redirect schema, regardless of its title, for the redirect trend;
 - a safe `feedback tickets` range that excludes user ID and free text, then aggregates country/segment counts server-side.
 
-The raw popup snapshot has no time column and is always labeled undated. The source is manually updated monthly. Daily redirects currently end on 2026-07-31, so they are visibly lagged against August AppFollow data and are never presented as a same-period historical comparison.
+The raw popup snapshot has no time column and is always labeled undated. The source is manually updated monthly. Daily redirect coverage is derived from all matching tabs. Workbook modification dates are shown separately from observation coverage: an October upload may contain September events. Mixed periods and undated raw snapshots are never presented as a same-period historical comparison.
 
 “Accepted” means redirected to the store. It does not prove an external-store rating. Popup stars remain in-product sentiment.
 
@@ -73,7 +73,7 @@ The `ratings_cache` tab supplies country-level month-to-date Google Play new ins
 monthly_new_installs / elapsed_days_in_month × 7
 ```
 
-The current source is dated through 2026-07-29 and is therefore visibly stale relative to August AppFollow. The minimum-weekly-download slider controls the attention queue and all overview KPIs; setting it to zero includes countries with missing volume.
+Source coverage and staleness are derived from the actual `As Of Date` values. The minimum-weekly-download slider controls the attention queue and all overview KPIs; setting it to zero includes countries with missing volume.
 
 Install/download volume is a prioritization signal, never a rating weight or substitute for effective rating count `N`.
 

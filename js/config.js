@@ -3,7 +3,7 @@ export const CONFIG = {
     brand: 'IQ Option',
     store: 'GooglePlay',
     country: 'all',
-    period: 'August 2026',
+    period: '', // Resolve to the latest available AppFollow period on load/reset.
     target: 4.2,
     minWeeklyDownloads: 500,
   },

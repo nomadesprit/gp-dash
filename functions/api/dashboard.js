@@ -1,4 +1,5 @@
 import { DASHBOARD_CACHE_VERSION, resolvePrivateSources, SOURCE_CACHE_SECONDS } from '../lib/source-config.js';
+import { combineDailyRedirects, isDailyRedirectHeader } from '../lib/source-coverage.js';
 import { freshness, latestDate, summarizeCampaignTracker, summarizeFeedback } from '../lib/server-data.js';
 
 const encoder = new TextEncoder();
@@ -84,7 +85,7 @@ async function driveMetadata(id, token) {
 
 const quoteTitle = title => `'${String(title).replace(/'/g, "''")}'`;
 
-async function buildDashboardPayload(secret, sourceIdSecret) {
+export async function buildDashboardPayload(secret, sourceIdSecret) {
   const privateSources = resolvePrivateSources(sourceIdSecret);
   const token = await googleAccessToken(secret);
   const [appTitles, popupTitles] = await Promise.all([
@@ -92,14 +93,17 @@ async function buildDashboardPayload(secret, sourceIdSecret) {
     sheetTitles(privateSources.popup.id, token),
   ]);
   const monthTitles = appTitles.filter(title => privateSources.appFollow.monthPattern.test(title));
-  const dailyTitles = popupTitles.filter(title => title.toLowerCase().startsWith(privateSources.popup.dailyPrefix.toLowerCase()));
-  const appRanges = [privateSources.appFollow.appsRange, ...monthTitles.map(title => `${quoteTitle(title)}!A1:Z1000`)];
+  // Discover by schema: monthly exports may use short or renamed tab titles.
+  // Read headers only before selecting the five safe aggregate columns.
+  const popupHeaders = await batchValues(privateSources.popup.id, popupTitles.map(title => `${quoteTitle(title)}!A1:E1`), token);
+  const dailyTitles = popupTitles.filter((title, index) => isDailyRedirectHeader(popupHeaders[index].rows[0]));
+  const appRanges = [privateSources.appFollow.appsRange, ...monthTitles.map(title => `${quoteTitle(title)}!A:Z`)];
   const popupRanges = [
     privateSources.popup.rawRange,
     privateSources.popup.ratesRange,
     privateSources.popup.summaryRange,
     privateSources.popup.feedbackRange,
-    ...dailyTitles.map(title => `${quoteTitle(title)}!A1:E1000`),
+    ...dailyTitles.map(title => `${quoteTitle(title)}!A:E`),
   ];
 
   const [appValues, popupValues, volumeValues, campaignValues, appMeta, popupMeta, volumeMeta, campaignMeta] = await Promise.all([
@@ -118,9 +122,7 @@ async function buildDashboardPayload(secret, sourceIdSecret) {
   ]);
 
   const ratingTabs = monthTitles.map((period, index) => ({ period, rows: appValues[index + 1].rows }));
-  const dailyRows = popupValues.slice(4).flatMap(valueRange => valueRange.rows.slice(1));
-  const dailyHeader = popupValues[4]?.rows?.[0] || ['event_date', 'brand_name', 'country_name', 'platform_type', 'users_redirected_to_store'];
-  const allDailyRows = dailyRows.length ? [dailyHeader, ...dailyRows] : [];
+  const allDailyRows = combineDailyRedirects(popupValues.slice(4).map(valueRange => valueRange.rows));
   const feedbackSummary = summarizeFeedback(popupValues[3].rows);
   const campaignStart = 1;
   const participantRanges = campaignValues.slice(campaignStart, campaignStart + privateSources.campaign.participantRanges.length).map(item => item.rows);
@@ -150,6 +152,8 @@ async function buildDashboardPayload(secret, sourceIdSecret) {
       ageDays: null,
       rawSnapshotDated: false,
       dailyRedirectThrough: latestDate(allDailyRows, 'event_date'),
+      dailyRedirectTabCount: dailyTitles.length,
+      dailyRedirectFreshness: freshness(latestDate(allDailyRows, 'event_date'), privateSources.popup.warningAfterDays, now),
     },
     volume: {
       fileModifiedTime: volumeMeta.modifiedTime,

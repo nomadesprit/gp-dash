@@ -1,4 +1,6 @@
 const COUNTRY_CODES = new Map(Object.entries({
+  'Antarctica':'AQ','Finland':'FI','Greece':'GR','Grenada':'GD',
+  'Aruba':'AW','Gabon':'GA','Gambia':'GM','Hungary':'HU',
   'Algeria':'DZ','Angola':'AO','Argentina':'AR','Austria':'AT','Azerbaijan':'AZ',
   'Australia':'AU','Mauritania':'MR',
   'Bahrain':'BH','Bangladesh':'BD','Bolivia':'BO','Brazil':'BR','Chile':'CL',
