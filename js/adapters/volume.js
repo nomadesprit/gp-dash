@@ -15,6 +15,14 @@ export function estimateWeeklyDownloads(monthlyNewInstalls, asOfDate) {
   return Math.round((installs / elapsedDays) * 7);
 }
 
+// The source is MTD, not a rolling 30-day total. Keep this estimate explicit in the UI.
+export function estimate30DayDownloads(monthlyNewInstalls, asOfDate) {
+  const installs = numberValue(monthlyNewInstalls);
+  const elapsedDays = elapsedDaysInMonth(asOfDate);
+  if (installs === null || installs < 0 || !elapsedDays) return null;
+  return Math.round((installs / elapsedDays) * 30);
+}
+
 export function parseVolumeSnapshot(source, options = {}) {
   const unmapped = new Set();
   const rows = Array.isArray(source) ? source : parseCsv(source);

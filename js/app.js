@@ -3,10 +3,10 @@ import { loadDashboardData } from './source-loader.js';
 import { recordAtPeriod } from './adapters/appfollow.js';
 import { extractUserIds } from './adapters/csv.js';
 import { isReservedCampaignId, isTestCampaign, suggestCampaignId } from './adapters/campaigns.js';
-import { applyMinimumWeeklyDownloads } from './adapters/volume.js';
+import { applyMinimumWeeklyDownloads, estimate30DayDownloads } from './adapters/volume.js?v=20261005-target';
 import { toCsv } from './campaign-files.js';
 import { countryName } from './normalization.js';
-import { campaignProgress, mixedForecast, percentage, sum } from './calculations.js?v=20260812-forecast-3';
+import { campaignProgress, ratingTargetPlan, percentage, sum } from './calculations.js?v=20261005-target';
 import { formatDashboardDate, formatDashboardDateTime } from './date-format.js';
 
 const $ = selector => document.querySelector(selector);
@@ -167,10 +167,18 @@ function renderOverview(records, scope) {
   $('#volume-filter-summary').textContent = `${records.length} of ${scope.base.length} countries included · ${scope.below} below volume · ${scope.unknown} volume unknown`;
 }
 
+const forecastKey = record => `${recordKey(record)}|${record.sourcePeriod}`;
+
+function forecastDefaults(record) {
+  const volume = lookupVolume(record);
+  return state.forecastInputs.get(forecastKey(record)) || {
+    downloads30Days: estimate30DayDownloads(volume?.monthlyNewInstalls, volume?.asOfDate) ?? '',
+    downloadsManual: false,
+  };
+}
+
 function forecastStateFor(record) {
-  const saved = state.forecastInputs.get(recordKey(record));
-  if (!saved) return 'unavailable';
-  return mixedForecast({ currentRating: record.current, target: state.filters.target, inputsVerified: false, ...saved }).state;
+  return ratingTargetPlan({ currentRating: record.current, target: state.filters.target, ...forecastDefaults(record) }).ratingState;
 }
 
 function tableRow(record) {
@@ -193,7 +201,7 @@ function tableRow(record) {
     <td>${Number.isFinite(volume?.weeklyDownloads) ? `<span class="metric-main">${volume.weeklyDownloadsExact ? '' : '≈ '}${formatInt(volume.weeklyDownloads)}</span><span class="submetric">${volume.weeklyDownloadsExact ? '7-day total' : 'MTD run-rate'} · through ${esc(formatDashboardDate(volume.asOfDate || 'unknown'))}</span>` : '<span class="metric-main">—</span><span class="submetric">Volume unavailable</span>'}</td>
     <td>${popup ? `<span class="metric-main">${formatInt(popup.accepted)} redirects</span><span class="submetric">${formatRate(popup.acceptanceRate)} of ${formatInt(popup.show)} shown · n=${formatInt(popup.popupSentimentSample)} rated</span>` : '<span class="metric-main">—</span><span class="submetric">No country sample</span>'}</td>
     <td>${campaigns.length ? `<span class="badge neutral">${esc(campaigns.at(-1).localOnly ? 'Local draft' : campaigns.at(-1).status || 'Tracked')}</span><span class="submetric">Audience ${formatInt(sum(campaigns, 'audience_size'))} · evidence ${formatInt(sum(campaigns, 'evidence_submissions'))}</span>` : campaignEmpty}</td>
-    <td><span class="badge ${forecastState === 'assumption-driven' ? 'assumption' : forecastState === 'ready' ? 'ready' : 'neutral'}">${esc(forecastState)}</span><span class="submetric">${forecastState === 'unavailable' ? 'Effective count missing' : 'Editable assumptions'}</span></td>
+    <td><span class="badge ${forecastState === 'estimate' ? 'assumption' : forecastState === 'target-reached' ? 'ready' : 'neutral'}">${esc(forecastState)}</span><span class="submetric">${forecastState === 'unavailable' ? 'Download estimate needed' : forecastState === 'target-reached' ? 'No additional ratings needed' : 'Five-star rating model'}</span></td>
     <td><span class="quality-flag">Freshness gap</span><span class="submetric">${quality}</span></td>
   </tr>`;
 }
@@ -281,85 +289,67 @@ function renderCampaignFunnel(record) {
   ].join('');
 }
 
-function forecastDefaults(record, popup) {
-  return state.forecastInputs.get(recordKey(record)) || {
-    effectiveRatingCount: '', popupExposure: 0, acceptanceRate: popup?.acceptanceRate ?? '',
-    redirectToVerifiedRate: '', popupExpectedScore: '', campaignAudience: campaignFor(record).at(-1)?.audience_size || 0,
-    campaignVerificationRate: '', campaignExpectedScore: '', remainingExpectedScore: '',
-  };
-}
-
 function setInput(id, value) { $(id).value = value ?? ''; }
 
-function renderForecast(record, popup) {
-  const inputs = forecastDefaults(record, popup);
-  $('#forecast-country-label').textContent = `${countryName(record.countryCode)} · ${record.store === 'GooglePlay' ? 'Google Play' : 'App Store'}`;
+function renderForecast(record) {
+  $('#forecast-form').hidden = !record;
+  if (!record) {
+    $('#forecast-country-label').textContent = 'Select a country';
+    $('#forecast-state').textContent = 'Unavailable';
+    $('#forecast-state').className = 'badge neutral';
+    $('#forecast-result').innerHTML = '<p class="muted">Select a country from the table to calculate its rating target and email plan.</p>';
+    return;
+  }
+  const inputs = forecastDefaults(record);
+  $('#forecast-country-label').textContent = `${countryName(record.countryCode)} · ${record.store === 'GooglePlay' ? 'Google Play' : 'App Store'} · ${record.sourcePeriod}`;
   setInput('#forecast-current', record.current);
   setInput('#forecast-target', state.filters.target);
-  setInput('#forecast-count', inputs.effectiveRatingCount);
-  setInput('#forecast-popup-exposure', inputs.popupExposure);
-  setInput('#forecast-acceptance', inputs.acceptanceRate);
-  setInput('#forecast-popup-verified', inputs.redirectToVerifiedRate);
-  setInput('#forecast-popup-score', inputs.popupExpectedScore);
-  setInput('#forecast-campaign-audience', inputs.campaignAudience);
-  setInput('#forecast-campaign-rate', inputs.campaignVerificationRate);
-  setInput('#forecast-campaign-score', inputs.campaignExpectedScore);
-  setInput('#forecast-remaining-score', inputs.remainingExpectedScore);
-  updateForecast(record);
+  setInput('#forecast-downloads', inputs.downloads30Days);
+  updateForecast(record, inputs);
 }
 
-function readForecastInputs() {
+function readForecastInputs(record, event) {
   const read = id => $(id).value === '' ? '' : Number($(id).value);
   return {
-    effectiveRatingCount: read('#forecast-count'), popupExposure: read('#forecast-popup-exposure'),
-    acceptanceRate: read('#forecast-acceptance'), redirectToVerifiedRate: read('#forecast-popup-verified'),
-    popupExpectedScore: read('#forecast-popup-score'), campaignAudience: read('#forecast-campaign-audience'),
-    campaignVerificationRate: read('#forecast-campaign-rate'), campaignExpectedScore: read('#forecast-campaign-score'),
-    remainingExpectedScore: read('#forecast-remaining-score'),
+    downloads30Days: read('#forecast-downloads'),
+    downloadsManual: event?.target?.id === 'forecast-downloads' || forecastDefaults(record).downloadsManual,
   };
 }
 
-function updateForecast(record) {
-  const inputs = readForecastInputs();
-  state.forecastInputs.set(recordKey(record), inputs);
-  const result = mixedForecast({ currentRating: record.current, target: Number($('#forecast-target').value), inputsVerified: false, ...inputs });
+function updateForecast(record, inputs) {
+  state.forecastInputs.set(forecastKey(record), inputs);
+  const target = $('#forecast-target').value;
+  const result = ratingTargetPlan({ currentRating: record.current, target, ...inputs });
+  setInput('#forecast-count', result.ratingBase);
   const badge = $('#forecast-state');
-  badge.textContent = result.state;
-  badge.className = `badge ${result.state === 'assumption-driven' ? 'assumption' : result.state === 'ready' ? 'ready' : 'neutral'}`;
-  const popup = lookupPopup(record);
-  const sample = popup ? `${formatInt(popup.show)} popup exposures / ${formatInt(popup.rated)} in-popup ratings` : 'No popup country sample';
-  const hasN = Number.isFinite(Number(inputs.effectiveRatingCount)) && Number(inputs.effectiveRatingCount) > 0;
-  const popupPlanned = Number(inputs.popupExposure) > 0;
-  const popupReady = !popupPlanned || ([inputs.acceptanceRate, inputs.redirectToVerifiedRate, inputs.popupExpectedScore].every(presentNumber));
-  const campaignPlanned = Number(inputs.campaignAudience) > 0;
-  const campaignReady = !campaignPlanned || ([inputs.campaignVerificationRate, inputs.campaignExpectedScore].every(presentNumber));
-  $('#forecast-readiness').innerHTML = `<strong>Prediction readiness</strong><div class="readiness-list">
-    <div class="readiness-item ${hasN ? 'complete' : ''}"><span>Rating inertia (N)</span><span>${hasN ? `${formatInt(inputs.effectiveRatingCount)} · entered assumption` : 'missing · exact rating path blocked'}</span></div>
-    <div class="readiness-item ${popupReady ? 'complete' : ''}"><span>Popup channel</span><span>${popupPlanned ? (popupReady ? 'assumptions complete' : 'conversion/score missing') : 'not included'}</span></div>
-    <div class="readiness-item ${campaignReady ? 'complete' : ''}"><span>Campaign channel</span><span>${campaignPlanned ? (campaignReady ? 'assumptions complete' : 'verification/score missing') : 'not included'}</span></div>
-    <div class="readiness-item"><span>Evidence confidence</span><span>${hasN ? 'low · manual inputs' : 'unavailable'}</span></div>
-  </div>`;
-  const plannedRedirects = popupPlanned && presentNumber(inputs.acceptanceRate) ? Number(inputs.popupExposure) * Number(inputs.acceptanceRate) : null;
-  const popupVerified = popupReady && popupPlanned ? plannedRedirects * Number(inputs.redirectToVerifiedRate) : null;
-  const campaignVerified = campaignReady && campaignPlanned ? Number(inputs.campaignAudience) * Number(inputs.campaignVerificationRate) : null;
-  $('#forecast-channel-path').innerHTML = `<strong>Channel prediction path</strong><div class="path-grid">
-    <div class="path-step"><span>Popup exposures</span><strong>${formatInt(inputs.popupExposure)}</strong></div>
-    <div class="path-step"><span>Expected redirects</span><strong>${formatInt(plannedRedirects)}</strong></div>
-    <div class="path-step"><span>Expected verified popup ratings</span><strong>${formatInt(popupVerified)}</strong></div>
-    <div class="path-step"><span>Expected verified campaign ratings</span><strong>${formatInt(campaignVerified)}</strong></div>
-  </div><p class="explain">Redirect and screenshot tracker states are operational signals. Only the separately entered verified-rating conversion assumptions feed the rating prediction.</p>`;
-  if (result.state === 'unavailable') {
-    $('#forecast-result').innerHTML = `<strong>Forecast unavailable</strong><p class="muted">No precise target is produced. Missing: ${esc(result.missing.join('; '))}.</p><ul><li>Confidence: unavailable</li><li>Sample: ${esc(sample)}</li><li>AppFollow review weight N is not supplied.</li></ul>`;
-  } else {
-    const remaining = result.remainingReviews === null ? 'Not solvable with current score assumption' : formatInt(result.remainingReviews);
-    $('#forecast-result').innerHTML = `<strong>Assumption-driven scenario</strong><div class="result-number">${formatRating(result.projectedRating)} projected</div><ul><li>Expected verified popup ratings: ${formatInt(result.popupVerified)}</li><li>Expected verified campaign ratings: ${formatInt(result.campaignVerified)}</li><li>Additional verified ratings to close remaining gap: ${remaining}</li><li>Confidence: low · all entered conversions/scores are editable assumptions</li><li>Sample: ${esc(sample)}</li></ul>`;
-  }
+  badge.textContent = result.ratingState === 'target-reached' ? 'Target reached' : result.ratingState === 'estimate' ? 'Planning estimate' : 'Downloads needed';
+  if (result.ratingState === 'unreachable') badge.textContent = 'Target unreachable';
+  badge.className = `badge ${result.ratingState === 'estimate' ? 'assumption' : result.ratingState === 'target-reached' ? 'ready' : 'neutral'}`;
+  const volume = lookupVolume(record);
+  const estimate = estimate30DayDownloads(volume?.monthlyNewInstalls, volume?.asOfDate);
+  $('#forecast-downloads-note').textContent = inputs.downloadsManual
+    ? 'Manually entered 30-day total for this country and store.'
+    : estimate === null ? 'No source estimate available. Enter the last-30-days total for this country and store.'
+    : `Estimated from ${formatInt(volume.monthlyNewInstalls)} month-to-date installs through ${formatDashboardDate(volume.asOfDate)}; not an observed rolling 30-day total. Edit to use an exact total.`;
+  $('#forecast-reset-downloads').disabled = estimate === null;
+  const x = result.ratingBase === null ? '—' : Number(result.ratingBase).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  $('#forecast-result').innerHTML = `<div class="forecast-result">
+      <strong>Additional five-star ratings to reach ${esc(formatRating(target))}</strong>
+      <div class="result-number">${formatInt(result.fiveStarRatings)}</div>
+      <p class="muted">${esc(result.reason)}</p>
+    </div><div class="forecast-result">
+      <strong>Emails to send · download-based plan</strong>
+      <div class="result-number">${formatInt(result.emails)}</div>
+      <p class="muted">${result.emails === null ? 'Enter a valid whole-number download total to calculate the email plan.' : `X = ${formatInt(inputs.downloads30Days)} × 3% = ${x}. Emails = X ÷ (1% × 80%), rounded up.`}</p>
+      <p class="field-note">Fixed download-based formula: changing the rating target does not change this email plan.</p>
+    </div>`;
 }
 
 function renderDetail(record) {
   if (!record) {
     $('#detail-heading').textContent = 'Select a country';
     $('#detail-rating').textContent = '—';
+    renderForecast(null);
     return;
   }
   const popup = lookupPopup(record);
@@ -373,7 +363,7 @@ function renderDetail(record) {
   renderPopupDetail(popup);
   renderFeedback(record);
   renderCampaignFunnel(record);
-  renderForecast(record, popup);
+  renderForecast(record);
 }
 
 function renderCampaigns() {
@@ -899,7 +889,7 @@ function renderQuality() {
     : `The high-level pivot reports ${formatInt(pivotIqAndroid)} IQ Option Android users shown versus ${formatInt(rawIqAndroid)} in joinable raw rows. The discrepancy remains visible.`;
   $('#quality-list').innerHTML = `<div class="quality-list">
     <div class="quality-item"><strong>Country normalization</strong>${unmapped.length ? `${unmapped.length} unmapped source values: ${esc(unmapped.join(', '))}. Their aggregates are excluded from country joins but remain visible here.` : 'No source countries are unmapped. Known aliases include Viet Nam/Vietnam and Venezuela variants.'}</div>
-    <div class="quality-item"><strong>Rating weight</strong>Per-country/store effective rating counts are absent. Overall rating is explicitly unweighted and forecasts begin unavailable.</div>
+    <div class="quality-item"><strong>Rating weight</strong>Country/store rating counts are absent. The five-star model assumes downloads × 3% as its rating count; the independent email plan uses downloads × 3.75.</div>
     <div class="quality-item"><strong>Download volume</strong>Weekly values are run-rate estimates from month-to-date Google Play new installs through ${esc(downloadThrough)}. Missing volume is excluded only when the minimum is above zero.</div>
     <div class="quality-item"><strong>Freshness</strong>AppFollow is expected every Friday and its latest available source period is ${esc(sources.appFollow?.latestPeriod || state.data.ratingData.periods.at(-1) || 'unknown')}. Popup is manually updated monthly, but raw popup rows remain an undated snapshot and daily redirects end ${esc(dailyThrough)}. Download volume is dated through ${esc(formatDashboardDate(sources.volume?.dataThrough || downloadThrough))}. Permission-change timestamps are not treated as evidence refresh dates, and mismatched periods are never presented as historical comparisons.</div>
     <div class="quality-item"><strong>Popup semantics</strong>Accepted means store redirect. Popup star distributions are sentiment signals, not external-store reviews.</div>
@@ -959,14 +949,26 @@ function bindEvents() {
   $('#reset-filters').addEventListener('click', resetFilters);
   $('#country-rows').addEventListener('click', event => selectRow(event.target.closest('tr')));
   $('#country-rows').addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); selectRow(event.target.closest('tr')); } });
-  $('#forecast-form').addEventListener('input', () => {
+  $('#forecast-form').addEventListener('submit', event => event.preventDefault());
+  $('#forecast-reset-downloads').addEventListener('click', () => {
+    const record = selectedRecord(scopedRecords());
+    if (!record) return;
+    const volume = lookupVolume(record);
+    const inputs = { ...forecastDefaults(record), downloads30Days: estimate30DayDownloads(volume?.monthlyNewInstalls, volume?.asOfDate) ?? '', downloadsManual: false };
+    state.forecastInputs.set(forecastKey(record), inputs);
+    renderForecast(record);
+    $('#country-rows').innerHTML = scopedRecords().map(tableRow).join('');
+  });
+  $('#forecast-form').addEventListener('input', event => {
     const record = selectedRecord(scopedRecords());
     if (!record) return;
     if (document.activeElement === $('#forecast-target')) {
       state.filters.target = Number($('#forecast-target').value) || CONFIG.defaults.target;
       $('#target-filter').value = state.filters.target.toFixed(2);
+      renderOverview(scopedRecords(), volumeScope());
+      $('#rating-trend').innerHTML = lineChart(record.points, state.filters.target);
     }
-    updateForecast(record);
+    updateForecast(record, readForecastInputs(record, event));
     $('#country-rows').innerHTML = scopedRecords().map(tableRow).join('');
   });
   $('#new-campaign').addEventListener('click', openCampaignDialog);

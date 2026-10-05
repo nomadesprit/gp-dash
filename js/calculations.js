@@ -18,6 +18,35 @@ export function reviewsNeeded({ currentRating, target, effectiveRatingCount, exp
   return Math.max(0, Math.ceil(((N * (T - R)) / (S - T)) - 1e-9));
 }
 
+/** Independent outputs: the rating-gap model and the user's download-based email plan. */
+export function ratingTargetPlan({ currentRating, target, downloads30Days }) {
+  const R = Number(currentRating), T = Number(target);
+  const D = Number(downloads30Days);
+  const validRating = finite(currentRating) && R >= 1 && R <= 5;
+  const validTarget = finite(target) && T >= 1 && T <= 5;
+  const validDownloads = finite(downloads30Days) && Number.isInteger(D) && D >= 0;
+  const ratingBase = validDownloads ? Number((D * 0.03).toFixed(2)) : null;
+  const emails = validDownloads ? Math.ceil(D * 3.75) : null;
+  let fiveStarRatings = null;
+  let ratingState = 'unavailable';
+  let reason = 'Enter a positive 30-day download total to estimate the country rating count.';
+  if (!validRating || !validTarget) {
+    reason = 'A current rating and target between 1 and 5 are required.';
+  } else if (R >= T) {
+    fiveStarRatings = 0;
+    ratingState = 'target-reached';
+    reason = 'The selected country is already at or above the target.';
+  } else if (T === 5) {
+    ratingState = 'unreachable';
+    reason = 'An average below 5 cannot reach exactly 5 with a finite number of additional five-star ratings.';
+  } else if (ratingBase > 0) {
+    fiveStarRatings = reviewsNeeded({ currentRating: R, target: T, effectiveRatingCount: ratingBase, expectedScore: 5 });
+    ratingState = 'estimate';
+    reason = 'Simple-average estimate using downloads × 3% as the assumed country rating count and only new five-star ratings.';
+  }
+  return { fiveStarRatings, ratingState, reason, ratingBase, emails };
+}
+
 export function mixedForecast(input) {
   const R = Number(input.currentRating), T = Number(input.target), N = Number(input.effectiveRatingCount);
   const popupExposure = Number(input.popupExposure || 0);

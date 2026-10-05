@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=20261005-target">
 </head>
 <body>
   <a class="skip-link" href="#country-table">Skip to country priorities</a>
@@ -36,7 +36,7 @@
       <div>
         <p class="eyebrow">Growth operations · decision console</p>
         <h1 id="overview-heading">Ratings, popup health <span>&amp;</span> campaigns</h1>
-        <p class="lede">Find the country/store that needs attention, inspect the evidence, then model a rating-neutral path toward the target.</p>
+        <p class="lede">Find the country/store that needs attention, inspect the evidence, then estimate the five-star ratings needed to reach the target.</p>
       </div>
       <p class="section-note" id="scope-note"></p>
     </section>
@@ -67,7 +67,7 @@
         <p class="kicker">Decision lens</p>
         <h2 id="decision-summary-heading">Start with volume-qualified countries below target.</h2>
       </div>
-      <p>Use the table to separate rating risk from popup traffic health, then test the path in the forecast. <strong>No exact forecast is presented until rating inertia and verified conversion assumptions are supplied.</strong></p>
+      <p>Select a country to estimate the five-star ratings needed for your target and the email volume from its download count.</p>
     </section>
 
     <section aria-label="Overview metrics">
@@ -130,40 +130,31 @@
 
     <section class="panel forecast-workbench" id="forecast" aria-labelledby="forecast-heading">
       <div class="section-heading compact">
-        <div><p class="kicker">04 · Forecast</p><h2 id="forecast-heading">Evidence-based scenario model</h2></div>
+        <div><p class="kicker">04 · Forecast</p><h2 id="forecast-heading">Rating target & email plan</h2></div>
         <div class="forecast-heading-state"><span id="forecast-country-label">Select a country</span><span class="badge neutral" id="forecast-state">Unavailable</span></div>
       </div>
-      <p class="muted">A planning scenario, never a promise. Blank inputs mean the evidence is absent; popup sentiment is never substituted for an external-store score.</p>
+      <p class="muted">Five-star ratings needed for the selected country, alongside your download-based email plan.</p>
       <div class="forecast-layout">
         <form id="forecast-form" class="forecast-form">
-          <fieldset><legend>Rating base</legend>
-            <label>Current rating R<input id="forecast-current" type="number" step="0.001" readonly></label>
-            <label>Target T<input id="forecast-target" type="number" min="1" max="5" step="0.01"></label>
-            <label>Effective rating count N<input id="forecast-count" type="number" min="1" step="1" placeholder="Required source missing"></label>
-            <p class="field-note">N must be aligned with the displayed AppFollow country/store rating.</p>
+          <fieldset><legend>Country rating target</legend>
+            <label>Current rating<input id="forecast-current" type="number" step="0.001" readonly></label>
+            <label>Target rating<input id="forecast-target" type="number" min="1" max="5" step="0.01"></label>
+            <label class="full-width">Assumed country rating count (X)<input id="forecast-count" type="number" min="0" step="any" readonly aria-describedby="forecast-count-note"></label>
+            <p class="field-note" id="forecast-count-note">X = downloads in the last 30 days × 3%. This is an assumption, not an observed rating count.</p>
           </fieldset>
-          <fieldset><legend>Popup plan</legend>
-            <label>Exposure plan<input id="forecast-popup-exposure" type="number" min="0" step="1" value="0"></label>
-            <label>Acceptance rate<input id="forecast-acceptance" type="number" min="0" max="1" step="0.001" placeholder="0–1"></label>
-            <label>Redirect → verified rate<input id="forecast-popup-verified" type="number" min="0" max="1" step="0.001" placeholder="Required if exposure > 0"></label>
-            <label>Expected external score<input id="forecast-popup-score" type="number" min="1" max="5" step="0.01" placeholder="Not popup sentiment"></label>
-          </fieldset>
-          <fieldset><legend>Campaign plan</legend>
-            <label>Audience<input id="forecast-campaign-audience" type="number" min="0" step="1" value="0"></label>
-            <label>Verification rate<input id="forecast-campaign-rate" type="number" min="0" max="1" step="0.001" placeholder="Required if audience > 0"></label>
-            <label>Expected external score<input id="forecast-campaign-score" type="number" min="1" max="5" step="0.01" placeholder="Rating-neutral expectation"></label>
-            <label>Remaining review score<input id="forecast-remaining-score" type="number" min="1" max="5" step="0.01" placeholder="Must exceed target"></label>
+          <fieldset><legend>Email plan</legend>
+            <label class="full-width">Downloads in the last 30 days<input id="forecast-downloads" type="number" min="0" step="1" placeholder="Enter 30-day downloads" aria-describedby="forecast-downloads-note"></label>
+            <p class="field-note" id="forecast-downloads-note"></p>
+            <button class="text-button" type="button" id="forecast-reset-downloads">Use source estimate</button>
+            <p class="field-note">X = downloads × 3%. Emails = X ÷ (1% × 80%).</p>
           </fieldset>
         </form>
-        <div class="forecast-output">
-          <div class="forecast-readiness" id="forecast-readiness"></div>
-          <div class="channel-path" id="forecast-channel-path"></div>
-          <div class="forecast-result" id="forecast-result"></div>
-        </div>
+        <div class="forecast-output" id="forecast-result" aria-live="polite"></div>
       </div>
-      <details class="assumptions"><summary>Formula, assumptions &amp; limitations</summary>
-        <p>For one channel where S &gt; T: <code>ceil(N × (T − R) / (S − T))</code>. Mixed plans estimate verified popup and campaign ratings separately, add their expected scores, then solve only the remaining gap.</p>
-        <p>AppFollow provides no effective per-country rating count. Popup acceptance is a store redirect—not a verified review—and popup stars are not external-store ratings. All manually entered conversion rates and scores are assumptions.</p>
+      <details class="assumptions"><summary>Formulas &amp; assumptions</summary>
+        <p><strong>Five-star ratings needed:</strong> <code>ceil(X × (T − R) / (5 − T))</code>, where X = downloads × 3% is the assumed country rating count, R the current rating and T the target. The result is zero when the target is already reached. This simple-average model assumes every added rating is five stars; it is not a guarantee of the displayed store rating.</p>
+        <p><strong>Emails to send:</strong> <code>ceil((D × 0.03) / (0.01 × 0.8))</code> = <code>ceil(D × 3.75)</code>, where D is downloads in the last 30 days. This is your download-based planning rule; it does not use the current rating, target or rating gap.</p>
+        <p>The source supplies month-to-date installs, so the default D is estimated as <code>MTD installs ÷ elapsed days × 30</code>, rounded to a whole download. Replace it with an exact last-30-days total when available. The actual country rating count is not supplied by the source; X is used only as an explicit modeling assumption.</p>
       </details>
     </section>
 
@@ -246,6 +237,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=20261005-target"></script>
 </body>
 </html>

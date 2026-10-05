@@ -21,3 +21,7 @@
 
 @media(max-width:760px){.review-toolbar,.review-card{grid-template-columns:1fr}.review-image{min-height:240px}.review-heading-actions{justify-content:flex-start}.review-summary{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:500px){.review-heading-actions,.review-actions{display:grid;grid-template-columns:1fr;width:100%}.review-heading-actions>*{width:100%}.review-summary{grid-template-columns:1fr}.review-meta{grid-template-columns:1fr}}
+
+/* Focused country rating calculator. */
+.forecast-form{grid-template-columns:1fr 1fr}.forecast-form .full-width{grid-column:1/-1}.forecast-form[hidden]{display:none}.forecast-result .result-number{font-size:30px;margin:6px 0}.forecast-result .muted{margin:6px 0;font-size:11px}.forecast-form .field-note,.forecast-output .field-note{font-size:10px;line-height:1.5}.forecast-heading-state{flex-wrap:wrap;justify-content:flex-end}.forecast-form .text-button{justify-self:start;grid-column:1/-1}
+@media(max-width:760px){.forecast-form{grid-template-columns:1fr}.forecast-heading-state{max-width:48%;text-align:right}.forecast-result .result-number{font-size:26px}}

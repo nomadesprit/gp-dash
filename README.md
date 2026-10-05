@@ -1,6 +1,6 @@
 # GP Dash
 
-Production decision dashboard for AppFollow ratings, popup health, campaign progress, download-volume prioritization, and rating-neutral forecast scenarios. The interface uses a light navy/blue decision-console theme and links back to the protected ORM home.
+Production decision dashboard for AppFollow ratings, popup health, campaign progress, download-volume prioritization, and five-star rating targets and download-based email plans. The interface uses a light navy/blue decision-console theme and links back to the protected ORM home.
 
 Production: `https://gp-dash.pages.dev/` (Cloudflare Access protected).
 
@@ -17,8 +17,8 @@ The automated suite covers:
 
 - rightmost AppFollow weekly values and cross-month history;
 - period, country, threshold, volume, and ISO-normalization calculations;
-- the forecast-unavailable guard when effective rating count `N` is absent;
-- mixed-channel forecast math and campaign pace projection;
+- five-star target and email formulas, rounding, missing/zero downloads and already-met targets;
+- 30-day download run-rate estimates, legacy forecast math and campaign pace projection;
 - full popup adapters and source cross-checks;
 - server-side feedback and campaign aggregation without personal fields;
 - live API row-array contracts and freshness windows;
@@ -75,7 +75,16 @@ monthly_new_installs / elapsed_days_in_month × 7
 
 Source coverage and staleness are derived from the actual `As Of Date` values. The minimum-weekly-download slider controls the attention queue and all overview KPIs; setting it to zero includes countries with missing volume.
 
-Install/download volume is a prioritization signal, never a rating weight or substitute for effective rating count `N`.
+Install/download volume remains a prioritization signal. By explicit user request, downloads × 3% also supplies an assumed country rating count in the target model; this is never labeled an observed count.
+
+### Rating target & email plan
+
+The selected country now has two independent calculations; the popup plan and mixed channel inputs have been removed from this UI.
+
+- Additional five-star ratings: `ceil(X × (T − R) / (5 − T))`, or zero if the current rating already meets the target (default 4.2). X = D × 3% is the assumed country rating count because the source does not provide an actual count. This assumes a simple average and all additional ratings are five stars. A target of exactly 5 is unreachable from below with a finite number of ratings.
+- Emails: `ceil((D × 0.03) / (0.01 × 0.8)) = ceil(D × 3.75)`, following the user's planning rule. This calculation is independent of current rating and target; it must not be represented as solving the rating gap.
+- D defaults to a clearly labeled 30-day run-rate from MTD installs divided by the source day-of-month, multiplied by 30 and rounded. The user may enter an exact rolling 30-day total or restore the source estimate. Source dates remain visible. Missing downloads stay missing; zero downloads produce zero emails.
+- Inputs are scoped to country/store/brand/reporting period in memory. Empty country selections clear the model rather than retaining another country's results.
 
 ## Campaign workflow
 
@@ -140,25 +149,11 @@ be ineligible for later campaigns until the tracker is reviewed.
 
 Campaign pace forecasting activates only when audience, valid dates, and observed submissions exist. It predicts screenshot-evidence completion at observed pace; it never infers external-store ratings.
 
-## Forecast contract and remaining production gap
+## Planning limits
 
-The dashboard deliberately refuses to fabricate a precise rating target. A precise production forecast requires a per-country/store effective rating count aligned with the displayed AppFollow rating. The existing Google Play install/cache workbook does not provide that count.
+The target model uses the explicitly agreed proxy X = 30-day downloads × 3%, because actual country rating counts are absent from the connected data. Both the assumed count and the MTD-derived 30-day download estimate are labeled in the UI. This simple-average scenario is not a precise prediction of the store's displayed rating. Popup sentiment and accepted screenshots are not used in either calculation.
 
-For one channel where expected external score `S > T`, the calculation is:
-
-```text
-ceil(N × (T − R) / (S − T))
-```
-
-Mixed popup and campaign plans estimate expected verified ratings separately, then solve only the remaining gap. Redirect-to-verified-review rates, campaign verification rates, and external-store scores must be independently defensible. Popup sentiment and accepted screenshots are never substituted for those measures.
-
-Exact next inputs:
-
-1. A per-country/store effective rating-count source aligned with AppFollow's displayed rating definition. If Google Play Console does not automate it, use a reviewed country-level Ratings export or another auditable backend source.
-2. A prepared production campaign from the Launch Campaign workflow (this now
-   creates the connected `Campaigns` row automatically).
-
-Without item 1, the forecast remains unavailable or explicitly assumption-driven. Without a launched campaign, campaign progress correctly stays empty.
+The email rule is deliberately independent of the rating gap. For example, 10,000 downloads gives X = 300 and 37,500 planned emails; moving from 4.0 to 4.2 requires 75 additional five-star ratings under the same proxy. A country already above target requires zero additional ratings, while the requested email planning rule still returns 37,500.
 
 ## Deployment and credential handling
 
