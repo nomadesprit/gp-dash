@@ -87,6 +87,7 @@ test('proxy sends canonical country list using deployed uploader shape and rejec
   const previousFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async (url, options) => {
+    if (url.endsWith('/readiness')) return Response.json({countryTrackingVersion:1});
     calls++;
     const forwarded = JSON.parse(options.body);
     assert.equal(forwarded.campaign.country, 'BR,CL');
@@ -94,7 +95,7 @@ test('proxy sends canonical country list using deployed uploader shape and rejec
     return Response.json({ campaign: { campaign_id: 'latam', country: 'BR,CL' }, mailingRows: [] });
   };
   const request = countries => ({ request: new Request('https://gp-dash.pages.dev/api/campaigns/prepare', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ campaign: { ...details, countries }, userIds: ['10001'] }),
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ campaign: { ...details, countries }, userIds: ['10001'], audience:[{userId:'10001',country:'BR'}] }),
   }), env: { UPLOADER_ADMIN_API_KEY: 'private-value' } });
   try {
     const response = await onRequestPost(request(['CL', 'BR', 'BR']));

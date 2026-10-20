@@ -32,3 +32,28 @@ export function campaignCountryFields(value, unmapped = null) {
   const countryCodes = campaignCountries(value, unmapped);
   return { countryCodes, countryCode: countryCodes.length === 1 ? countryCodes[0] : null };
 }
+
+// Reject ambiguous attribution before any invitation or participant write.
+export function normalizeAudience(userIds, audience, countries) {
+  const selected = campaignCountries(countries);
+  if (!selected.length) throw new Error('Select valid campaign countries first.');
+  if (audience !== undefined && (!Array.isArray(audience) || audience.length !== userIds.length)) throw new Error('Audience countries must match every USERID row.');
+  const seen = new Map();
+  return userIds.map((userId, index) => {
+    const row = audience?.[index];
+    if (row && String(row.userId ?? '').trim() !== String(userId).trim()) throw new Error('Audience USERID rows do not match.');
+    const raw = row?.country;
+    const code = raw === undefined || String(raw).trim() === '' ? (selected.length === 1 ? selected[0] : null) : normalizeCountry(raw);
+    if (!code || !selected.includes(code)) throw new Error(`Row ${index + 1}: COUNTRY must be one of the selected campaign countries.`);
+    if (seen.has(userId) && seen.get(userId) !== code) throw new Error(`Row ${index + 1}: the same USERID has conflicting countries.`);
+    seen.set(userId, code);
+    return { userId: String(userId).trim(), country: code };
+  });
+}
+
+export function attributedCountry(value, campaignCountry) {
+  const selected = campaignCountries(campaignCountry);
+  if (!String(value ?? '').trim()) return selected.length === 1 ? selected[0] : 'UNKNOWN';
+  const code = normalizeCountry(value);
+  return code && selected.includes(code) ? code : 'UNKNOWN';
+}

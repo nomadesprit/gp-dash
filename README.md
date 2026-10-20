@@ -94,9 +94,9 @@ Use **Plan a multi-country campaign** in the rating planner or **Launch campaign
 
 The campaign planner shows each selected country's current rating, editable 30-day downloads, five-star requirement and independent email plan. It uses the current brand/store/reporting period, independently of the table's country/search/volume filters. Source-derived MTD estimates and manual totals are labeled; missing inputs yield partial totals with coverage counts. Each country is rounded before summing; no blended rating is used. The planner's target applies to this campaign planning view; no campaign record is created until preparation.
 
-Country selections are saved as sorted, deduplicated ISO codes in the existing `country` field, e.g. `BR,CL,MX`. This fits the deployed uploader's 80-character contract (26 codes occupy 77 characters) without modifying the uploader or existing Sheet schema. Single-country names/codes remain readable, including legacy names containing commas. The proxy rejects empty, unmapped, mixed TEST/production, and over-limit selections before forwarding.
+Country selections are saved as sorted, deduplicated ISO codes in the existing `country` field, e.g. `BR,CL,MX`. This fits the deployed uploader's 80-character contract (26 codes occupy 77 characters) while retaining the existing campaign registry field. Participant/submission country columns are added separately for attribution. Single-country names/codes remain readable, including legacy names containing commas. The proxy rejects empty, unmapped, mixed TEST/production, and over-limit selections before forwarding.
 
-A campaign is represented once in aggregate KPIs and appears in each selected country's context. Its operational totals stay campaign-wide: participant records have no country, so country outcomes are not allocated or inferred. Multi-country table/funnel counts carry this label. Suggested IDs include a stable selection digest to distinguish groups, while custom IDs remain editable. Preparation locks the form while pending, invalidates stale results when campaign details change, and preserves the existing service's global eligibility, deduplication and retry receipts.
+A campaign is represented once in aggregate KPIs and appears in each selected country's context. Operational totals are shown once for the whole campaign, with a country breakdown derived from saved participant/submission countries. Missing or unattributable records remain in UNKNOWN; country table/funnel views use country-scoped counts. Suggested IDs include a stable selection digest to distinguish groups, while custom IDs remain editable. Preparation locks the form while pending, invalidates stale results when campaign details change, and preserves the existing service's global eligibility, deduplication and retry receipts.
 
 
 The Screenshot Upload Participation Tracker now contains a validated `Campaigns` registry with this schema:
@@ -140,7 +140,7 @@ detects the ID column, and sends the rows to a same-origin Pages Function only
 after the operator confirms preparation. The Function calls the uploader's
 authenticated admin endpoint with a server-only secret. The uploader performs
 the authoritative global duplicate check, stores token hashes and the campaign
-registry row, and returns a mailing-ready `USERID,UPLOAD_URL` CSV plus an
+registry row, and returns a mailing-ready `USERID,COUNTRY,UPLOAD_URL` CSV plus an
 exclusions CSV. Raw IDs and personalized links remain in the browser only long
 enough to download the files and are never included in the dashboard API.
 Eligibility and rewards remain independent of whether a rating is left and of
@@ -175,3 +175,12 @@ The service-account JSON is stored only as the encrypted `GOOGLE_SERVICE_ACCOUNT
 The campaign proxy also requires the encrypted `UPLOADER_ADMIN_API_KEY` Pages
 secret. Its matching `ADMIN_API_KEY` is configured on Cloud Run. Neither value
 is present in source or browser assets.
+
+
+### Country-attributed users and submissions
+
+Multi-country preparation requires a COUNTRY value for every USERID row. The browser and server reject missing/unselected countries and conflicting duplicate assignments before creating links; one selected country may fill an omitted country. The uploader stores brand/country in Participants L/M and snapshots country in Submissions R, preserving existing reward eligibility/reviewer columns P/Q. A guarded migration adds only compatible missing headers; historical participant/submission rows are not rewritten.
+
+Analytics returns country_breakdown on each campaign. Counts reconcile to combined totals via an explicit UNKNOWN bucket, including residual registry totals. Attribution uses the saved country, or an unambiguous single-country registry fallback for legacy rows. It never uses language or IP. Country table/detail funnels use projected country counts; sent/delivered/granted reward totals stay unallocated. Protected review and undo preserve all new fields and expose the saved submission country. Approved USERID export remains campaign-wide.
+
+The preparation proxy checks the authenticated uploader readiness capability before forwarding country-mapped audiences. An older uploader causes a 503 without campaign/participant writes. Mailing/exclusion downloads now include COUNTRY. Deploy and verify the uploader plus compatible header migration before publishing the new dashboard.

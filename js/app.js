@@ -1,9 +1,9 @@
 import { CONFIG } from './config.js';
 import { loadDashboardData } from './source-loader.js?v=20261020-countries';
 import { recordAtPeriod } from './adapters/appfollow.js';
-import { extractUserIds } from './adapters/csv.js';
+import { extractAudience } from './adapters/csv.js';
 import { isReservedCampaignId, isTestCampaign, suggestCampaignId, normalizeCampaignRecords } from './adapters/campaigns.js?v=20261020-countries';
-import { MAX_CAMPAIGN_COUNTRIES, campaignIncludesCountry, serializeCampaignCountries } from './campaign-countries.js';
+import { MAX_CAMPAIGN_COUNTRIES, campaignIncludesCountry, serializeCampaignCountries, normalizeAudience } from './campaign-countries.js';
 import { applyMinimumWeeklyDownloads, estimate30DayDownloads } from './adapters/volume.js?v=20261005-target';
 import { toCsv } from './campaign-files.js';
 import { countryName } from './normalization.js';
@@ -29,6 +29,9 @@ const state = {
   campaignScope: '',
   preparing: false,
   currentIds: [],
+  currentAudience: [],
+  audienceCsv: null,
+  audienceError: '',
   currentUniqueIdCount: 0,
   preparedCampaign: null,
   reviews: {
@@ -49,7 +52,12 @@ const state = {
 const recordKey = record => `${record.brand}|${record.store}|${record.countryCode}`;
 const lookupPopup = record => state.data.popupRecords.find(item => recordKey(item) === recordKey(record));
 const lookupVolume = record => state.data.volumeRecords.find(item => recordKey(item) === recordKey(record));
-const campaignFor = record => [...(state.data?.campaigns || []), ...state.drafts].filter(item => item.brand === record.brand && item.store === record.store && campaignIncludesCountry(item, record.countryCode));
+const campaignFor = record => [...(state.data?.campaigns || []), ...state.drafts].filter(item => item.brand === record.brand && item.store === record.store && campaignIncludesCountry(item, record.countryCode)).map(campaign => {
+    const metrics = campaign.country_breakdown?.find(row => row.countryCode === record.countryCode);
+    if (metrics) return { ...campaign, ...metrics, emails_sent: null, delivered: null, rewards_granted: null, countryScoped: true };
+    if (campaign.countryCodes?.length <= 1) return campaign;
+    return { ...campaign, audience_size: null, evidence_submissions: null, pending_review: null, approved: null, rejected: null, countryScoped: false };
+  });
 
 function fillSelect(element, values, selected, labeler = value => value) {
   element.innerHTML = '';
@@ -204,7 +212,7 @@ function tableRow(record) {
     <td><span class="metric-main">${gap ? `−${gap.toFixed(3)}` : 'On / above'}</span><span class="submetric">to ${Number(state.filters.target).toFixed(2)}</span></td>
     <td>${Number.isFinite(volume?.weeklyDownloads) ? `<span class="metric-main">${volume.weeklyDownloadsExact ? '' : '≈ '}${formatInt(volume.weeklyDownloads)}</span><span class="submetric">${volume.weeklyDownloadsExact ? '7-day total' : 'MTD run-rate'} · through ${esc(formatDashboardDate(volume.asOfDate || 'unknown'))}</span>` : '<span class="metric-main">—</span><span class="submetric">Volume unavailable</span>'}</td>
     <td>${popup ? `<span class="metric-main">${formatInt(popup.accepted)} redirects</span><span class="submetric">${formatRate(popup.acceptanceRate)} of ${formatInt(popup.show)} shown · n=${formatInt(popup.popupSentimentSample)} rated</span>` : '<span class="metric-main">—</span><span class="submetric">No country sample</span>'}</td>
-    <td>${campaigns.length ? `<span class="badge neutral">${esc(campaigns.at(-1).localOnly ? 'Local draft' : campaigns.at(-1).status || 'Tracked')}</span><span class="submetric">${campaigns.some(campaign => campaign.countryCodes?.length > 1) ? 'Campaign-wide · ' : ''}Audience ${formatInt(sum(campaigns, 'audience_size'))} · evidence ${formatInt(sum(campaigns, 'evidence_submissions'))}</span>` : campaignEmpty}</td>
+    <td>${campaigns.length ? `<span class="badge neutral">${esc(campaigns.at(-1).localOnly ? 'Local draft' : campaigns.at(-1).status || 'Tracked')}</span><span class="submetric">${campaigns.some(campaign => campaign.countryScoped === false) ? 'Country data unavailable · ' : ''}Audience ${formatInt(sum(campaigns, 'audience_size'))} · evidence ${formatInt(sum(campaigns, 'evidence_submissions'))}</span>` : campaignEmpty}</td>
     <td><span class="badge ${forecastState === 'estimate' ? 'assumption' : forecastState === 'target-reached' ? 'ready' : 'neutral'}">${esc(forecastState)}</span><span class="submetric">${forecastState === 'unavailable' ? 'Download estimate needed' : forecastState === 'target-reached' ? 'No additional ratings needed' : 'Five-star rating model'}</span></td>
     <td><span class="quality-flag">Freshness gap</span><span class="submetric">${quality}</span></td>
   </tr>`;
@@ -285,7 +293,7 @@ function renderCampaignFunnel(record) {
   }
   const campaign = campaigns.at(-1);
   const base = campaign.audience_size || 1;
-  $('#campaign-funnel').innerHTML = (campaign.countryCodes?.length > 1 ? `<p class="explain">Combined totals for ${esc(campaign.name || campaign.campaign_id)} across ${campaign.countryCodes.length} countries. Participant countries are not recorded; these counts are not attributed to ${esc(countryName(record.countryCode))}.</p>` : '') + [
+  $('#campaign-funnel').innerHTML = (campaign.countryCodes?.length > 1 ? `<p class="explain">${campaign.countryScoped ? `Country totals for ${esc(countryName(record.countryCode))}. Unknown country records remain in the campaign’s separate Unknown / unassigned row.` : 'Country totals unavailable for this legacy campaign snapshot.'}</p>` : '') + [
     funnelRow('Audience', campaign.audience_size, base), funnelRow('Sent', campaign.emails_sent, base),
     funnelRow('Delivered', campaign.delivered, base), funnelRow('Screenshot sent', campaign.evidence_submissions, base),
     funnelRow('Pending check', campaign.pending_review, base), funnelRow('Evidence accepted', campaign.approved, base),
@@ -370,6 +378,11 @@ function renderDetail(record) {
   renderForecast(record);
 }
 
+function renderCountryBreakdown(campaign) {
+  if (!campaign.country_breakdown?.length) return '';
+  return `<div class="country-outcomes"><table><caption>Campaign users and submissions by country</caption><thead><tr><th>Country</th><th>Users</th><th>Submitted</th><th>Pending</th><th>Approved</th><th>Rejected</th></tr></thead><tbody>${campaign.country_breakdown.filter(row => row.countryCode !== 'UNKNOWN' || ['audience_size','evidence_submissions','pending_review','approved','rejected'].some(key => row[key] > 0)).map(row => `<tr><td>${esc(row.countryCode === 'UNKNOWN' ? 'Unknown / unassigned' : countryName(row.countryCode))}</td><td>${formatInt(row.audience_size)}</td><td>${formatInt(row.evidence_submissions)}</td><td>${formatInt(row.pending_review)}</td><td>${formatInt(row.approved)}</td><td>${formatInt(row.rejected)}</td></tr>`).join('')}</tbody></table><p class="field-note">Country comes from the audience CSV and is saved on submission. Unknown includes older records and totals without a reliable country. Emails sent, delivery and rewards granted are not allocated by country.</p></div>`;
+}
+
 function renderCampaigns() {
   const allRecords = [...state.data.campaigns, ...state.drafts].filter(campaign => campaign.brand === state.filters.brand && campaign.store === state.filters.store && (isTestCampaign(campaign) || state.filters.country === 'all' || campaignIncludesCountry(campaign, state.filters.country)));
   const records = allRecords.filter(campaign => !isTestCampaign(campaign));
@@ -413,7 +426,8 @@ function renderCampaigns() {
           <div><strong>${formatInt(campaign.rewards_granted)}</strong><span>rewards recorded</span></div>
         </div>
         <div class="campaign-progress-bar" role="img" aria-label="${formatRate(forecast.completionRate)} of audience has submitted evidence"><i style="width:${progressWidth}%"></i></div>
-        <p class="explain">${campaign.countryCodes?.length > 1 ? 'Combined campaign totals · country outcome breakdown unavailable. ' : ''}Evidence accepted: ${formatInt(campaign.approved)} · blocked/rejected: ${formatInt(campaign.rejected)} · verified external ratings: not inferred.</p>
+        <p class="explain">${campaign.countryCodes?.length > 1 ? 'Combined campaign totals · see country breakdown below. ' : ''}Evidence accepted: ${formatInt(campaign.approved)} · blocked/rejected: ${formatInt(campaign.rejected)} · verified external ratings: not inferred.</p>
+        ${renderCountryBreakdown(campaign)}
       </article>`;
     }).join('');
   }
@@ -569,6 +583,7 @@ function renderReviews() {
         <div class="review-meta">
           <div><strong>${esc(item.userId)}</strong><span>User ID</span></div>
           <div><strong>${esc(reviewDate(item.submittedAt))}</strong><span>Submitted</span></div>
+          <div><strong>${esc(item.country === 'UNKNOWN' || !item.country ? 'Unknown' : countryName(item.country))}</strong><span>Campaign country</span></div>
           <div><strong>${esc(item.selectedLanguage || 'Not selected')}</strong><span>Upload language</span></div>
           <div><strong>${index + 1} of ${selectedItems.length}</strong><span>Queue position</span></div>
         </div>
@@ -695,6 +710,8 @@ function updateCampaignAfterReview(result) {
   campaign.pending_review = Math.max(0, (Number(campaign.pending_review) || 0) - 1);
   if (result.decision === 'approve') campaign.approved = (Number(campaign.approved) || 0) + 1;
   else campaign.rejected = (Number(campaign.rejected) || 0) + 1;
+  const metrics = campaign.country_breakdown?.find(row => row.countryCode === result.country);
+  if (metrics) { metrics.pending_review = Math.max(0, metrics.pending_review - 1); metrics[result.decision === 'approve' ? 'approved' : 'rejected'] += 1; }
   renderCampaigns();
 }
 
@@ -704,6 +721,8 @@ function updateCampaignAfterUndo(undo) {
   campaign.pending_review = (Number(campaign.pending_review) || 0) + 1;
   if (undo.decision === 'approve') campaign.approved = Math.max(0, (Number(campaign.approved) || 0) - 1);
   else campaign.rejected = Math.max(0, (Number(campaign.rejected) || 0) - 1);
+  const metrics = campaign.country_breakdown?.find(row => row.countryCode === undo.item?.country);
+  if (metrics) { metrics.pending_review += 1; const key = undo.decision === 'approve' ? 'approved' : 'rejected'; metrics[key] = Math.max(0, metrics[key] - 1); }
   renderCampaigns();
 }
 
@@ -1077,7 +1096,7 @@ function renderCountryOptions() {
 function renderCampaignSelection() {
   $('#selected-countries').innerHTML = [...state.campaignCountries].sort().map(code => `<button type="button" class="country-chip" data-remove-country="${esc(code)}" aria-label="Remove ${esc(countryName(code))}">${esc(countryName(code))} <span aria-hidden="true">×</span></button>`).join('');
   $('#campaign-country-status').textContent = state.campaignCountries.has('TEST') ? 'Internal test cohort selected. Production countries are excluded.' : `${state.campaignCountries.size} of ${MAX_CAMPAIGN_COUNTRIES} countries selected · audience and outcomes are combined for this campaign.`;
-  $('#prepare-campaign').disabled = !state.currentIds.length || !state.campaignCountries.size;
+  $('#prepare-campaign').disabled = !state.currentIds.length || !state.campaignCountries.size || Boolean(state.audienceError);
 }
 
 function campaignSelectionChanged() {
@@ -1091,6 +1110,7 @@ function campaignSelectionChanged() {
   renderCountryOptions();
   renderCampaignSelection();
   renderCampaignPlan();
+  if (state.audienceCsv !== null) validateAudienceFile();
   buildCampaignMessage();
 }
 
@@ -1138,6 +1158,9 @@ function openCampaignDialog() {
   $('#draft-id').dataset.suggestedId = $('#draft-id').value;
   validateCampaignId();
   state.currentIds = [];
+  state.currentAudience = [];
+  state.audienceCsv = null;
+  state.audienceError = '';
   state.currentUniqueIdCount = 0;
   state.preparedCampaign = null;
   $('#user-id-file').value = '';
@@ -1167,19 +1190,36 @@ function buildCampaignMessage() {
   $('#campaign-message').value = `Campaign: ${$('#draft-name').value.trim() || 'Rating-neutral feedback campaign'}\nCountries: ${countries}\nPeriod: ${dates[0]} to ${dates[1]}\n\nInvite eligible users to share honest product feedback. If they independently choose to leave a store rating or review, participation, support, and any reward eligibility must not depend on doing so, on its star value, or on whether it is positive or negative.\n\nProvide each participant only their unique secure screenshot-upload link issued by the campaign service. Do not share the base uploader URL as a substitute for a secure link.\n\nAudience file: ${state.currentUniqueIdCount ? `${state.currentUniqueIdCount.toLocaleString()} unique IDs ready for eligibility checking` : '[upload Metabase USERID CSV]'}. IDs are sent only when an operator prepares the campaign and are not stored in the dashboard.`;
 }
 
+function validateAudienceFile() {
+  try {
+    const detected = extractAudience(state.audienceCsv, [...state.campaignCountries], normalizeAudience);
+    state.currentIds = detected.inputIds;
+    state.currentAudience = detected.audience;
+    state.currentUniqueIdCount = detected.ids.length;
+    state.audienceError = detected.inputIds.length ? '' : 'No USERIDs were detected.';
+    const duplicates = detected.inputIds.length - new Set(detected.inputIds).size;
+    const countries = new Map();
+    const unique = new Map(detected.audience.map(row => [row.userId, row.country]));
+    for (const code of unique.values()) countries.set(code, (countries.get(code) || 0) + 1);
+    $('#file-status').textContent = `${formatInt(detected.ids.length)} unique IDs · ${[...countries].map(([code,count])=>`${countryName(code)}: ${formatInt(count)}`).join(' · ')}${duplicates ? ` · ${duplicates} duplicate row(s) will be excluded` : ''}. ${detected.countryHeader ? 'Countries read from CSV.' : 'Country filled from the single selected country.'} Nothing has been uploaded yet.`;
+  } catch (error) {
+    state.audienceError = error.message;
+    state.currentIds = [];
+    state.currentUniqueIdCount = 0;
+    state.currentAudience = [];
+    $('#file-status').textContent = `Audience needs correction: ${error.message}`;
+  }
+  $('#prepare-campaign').disabled = !state.currentIds.length || !state.campaignCountries.size || Boolean(state.audienceError);
+}
+
 function handleUserIdFile(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const detected = extractUserIds(reader.result);
-    state.currentIds = detected.inputIds;
-    state.currentUniqueIdCount = detected.ids.length;
-    const column = detected.header ? `“${detected.header}”` : detected.column !== null ? `column ${detected.column + 1}` : 'no column';
-    const duplicateCount = Math.max(0, detected.inputIds.length - detected.ids.length);
-    $('#file-status').textContent = `${formatInt(detected.ids.length)} unique IDs detected in ${column}${duplicateCount ? ` · ${formatInt(duplicateCount)} duplicate row${duplicateCount === 1 ? '' : 's'} will be reported` : ''}. Nothing has been uploaded yet.`;
-    $('#prepare-campaign').disabled = !detected.inputIds.length || !state.campaignCountries.size;
-    clearCampaignResult(detected.inputIds.length ? 'Ready to check eligibility and create secure links.' : 'No USERIDs were detected. Check the CSV column.');
+    state.audienceCsv = reader.result;
+    validateAudienceFile();
+    clearCampaignResult(state.audienceError || 'Ready to check eligibility and create country-tracked links.');
     buildCampaignMessage();
   };
   reader.readAsText(file);
@@ -1207,13 +1247,13 @@ function downloadCsv(filename, headers, rows) {
 function downloadMailingCsv() {
   const result = state.preparedCampaign;
   if (!result) return;
-  downloadCsv(`mailing-ready-${result.campaign.campaign_id}.csv`, ['USERID', 'UPLOAD_URL'], result.mailingRows.map(row => [row.userId, row.uploadUrl]));
+  downloadCsv(`mailing-ready-${result.campaign.campaign_id}.csv`, ['USERID', 'COUNTRY', 'UPLOAD_URL'], result.mailingRows.map(row => [row.userId, row.country || '', row.uploadUrl]));
 }
 
 function downloadExclusionsCsv() {
   const result = state.preparedCampaign;
   if (!result) return;
-  downloadCsv(`excluded-users-${result.campaign.campaign_id}.csv`, ['USERID', 'REASON'], result.excludedRows.map(row => [row.userId, row.reason]));
+  downloadCsv(`excluded-users-${result.campaign.campaign_id}.csv`, ['USERID', 'COUNTRY', 'REASON'], result.excludedRows.map(row => [row.userId, row.country || '', row.reason]));
 }
 
 function clearCampaignResult(message = 'Campaign details changed. Prepare again when ready.') {
@@ -1251,7 +1291,7 @@ function updateCampaignInView(campaign) {
 
 async function prepareCampaign(event) {
   event.preventDefault();
-  if (state.preparing || !state.currentIds.length || !event.currentTarget.reportValidity()) return;
+  if (state.preparing || state.audienceError || !state.currentIds.length || !event.currentTarget.reportValidity()) return;
   if (!state.campaignCountries.size) { $('#campaign-country-status').textContent = 'Select at least one country to prepare this campaign.'; $('#draft-country-search').focus(); return; }
   const button = $('#prepare-campaign');
   state.preparing = true;
@@ -1270,6 +1310,7 @@ async function prepareCampaign(event) {
           startDate: $('#draft-start').value, endDate: $('#draft-end').value,
         },
         userIds: state.currentIds,
+        audience: state.currentAudience,
         rotateExisting: $('#rotate-links').checked,
       }),
     });
@@ -1286,7 +1327,7 @@ async function prepareCampaign(event) {
   } finally {
     state.preparing = false;
     controls.forEach(([control, disabled]) => { control.disabled = disabled; });
-    button.disabled = !state.currentIds.length || !state.campaignCountries.size;
+    button.disabled = !state.currentIds.length || !state.campaignCountries.size || Boolean(state.audienceError);
     button.textContent = 'Check eligibility & prepare';
     if (state.preparedCampaign) {
       $('#download-mailing').disabled = !state.preparedCampaign.mailingRows.length;

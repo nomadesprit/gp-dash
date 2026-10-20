@@ -1,4 +1,4 @@
-import { serializeCampaignCountries } from '../../js/campaign-countries.js';
+import { serializeCampaignCountries, normalizeAudience } from '../../js/campaign-countries.js';
 
 export const MAX_CAMPAIGN_USERS = 5000;
 export const MAX_CAMPAIGN_BODY_BYTES = 512 * 1024;
@@ -14,17 +14,21 @@ export function validateCampaignRequest(input) {
   if (!Array.isArray(input.userIds) || input.userIds.length === 0) throw new Error('At least one user ID is required.');
   if (input.userIds.length > MAX_CAMPAIGN_USERS) throw new Error(`At most ${MAX_CAMPAIGN_USERS} user IDs are allowed.`);
   const campaign = input.campaign || {};
+  const country = serializeCampaignCountries(campaign.countries ?? campaign.country);
+  const userIds = input.userIds.map(value => String(value ?? "").trim());
+  const audience = normalizeAudience(userIds, input.audience, country);
   return {
     campaign: {
       campaignId: requiredText(campaign.campaignId, 'Campaign ID', 64),
       name: requiredText(campaign.name, 'Campaign name', 120),
       brand: requiredText(campaign.brand, 'Brand', 80),
       store: requiredText(campaign.store, 'Store', 40),
-      country: serializeCampaignCountries(campaign.countries ?? campaign.country),
+      country,
       startDate: String(campaign.startDate || '').trim(),
       endDate: String(campaign.endDate || '').trim(),
     },
-    userIds: input.userIds.map(value => String(value ?? '').trim()),
+    userIds,
+    audience,
     rotateExisting: input.rotateExisting === true,
   };
 }

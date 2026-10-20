@@ -69,7 +69,7 @@ export async function googleJson(url, token, options = {}) {
 }
 
 export async function reviewSheetRows(spreadsheetId, token) {
-  const ranges = ["'Participants'!A2:K", "'Submissions'!A2:Q", "'Campaigns'!A2:R"];
+  const ranges = ["'Participants'!A2:M", "'Submissions'!A2:R", "'Campaigns'!A2:R"];
   const params = new URLSearchParams({ majorDimension: 'ROWS', valueRenderOption: 'UNFORMATTED_VALUE' });
   ranges.forEach(range => params.append('ranges', range));
   const payload = await googleJson(

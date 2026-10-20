@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261020-countries">
+  <link rel="stylesheet" href="css/styles.css?v=20261020-attribution">
 </head>
 <body>
   <a class="skip-link" href="#country-table">Skip to country priorities</a>
@@ -233,10 +233,11 @@
         <div id="campaign-plan-totals" class="campaign-plan-totals" aria-live="polite"></div>
         <p class="field-help">Each country uses X = downloads × 3% as its assumed rating count. Emails = ceil(X ÷ (1% × 80%)), independently of the rating gap. Totals sum each country’s rounded plan; these are estimates, not campaign outcomes.</p>
       </section>
-      <label class="file-drop">Metabase USERID CSV (kept in memory only)
+      <label class="file-drop">Audience CSV · USERID + COUNTRY (kept in memory only)
         <input id="user-id-file" type="file" accept=".csv,text/csv">
-        <span id="file-status">Choose one combined audience CSV for the selected countries. The USERID column may appear anywhere.</span>
+        <span id="file-status">For multiple countries, include USERID and COUNTRY columns (e.g. BR, CL). For one country, COUNTRY may be omitted.</span>
       </label>
+      <p class="field-help">Each USERID must have one country from your campaign selection. Missing, unselected or conflicting countries block preparation. Country is not inferred from upload language or IP.</p>
       <label class="checkbox-label"><input id="rotate-links" type="checkbox"><span>Rotate secure links for users already registered to this campaign. Leave off for a normal retry.</span></label>
       <label>Rating-neutral campaign message<textarea id="campaign-message" rows="8"></textarea></label>
       <div class="campaign-prepare-status" id="campaign-prepare-status" role="status">Upload the Metabase CSV to begin.</div>
@@ -251,6 +252,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/app.js?v=20261020-countries"></script>
+  <script type="module" src="js/app.js?v=20261020-attribution"></script>
 </body>
 </html>

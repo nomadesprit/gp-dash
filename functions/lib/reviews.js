@@ -1,14 +1,16 @@
+import { attributedCountry } from '../../js/campaign-countries.js';
+
 export const PARTICIPANT_COLUMNS = [
   'user_id', 'status', 'current_campaign_id', 'token_hash', 'token_expires_at',
   'latest_submission_id', 'latest_submitted_at', 'first_success_at', 'language',
-  'updated_at', 'notes',
+  'updated_at', 'notes', 'brand', 'country',
 ];
 
 export const SUBMISSION_COLUMNS = [
   'submission_id', 'user_id', 'campaign_id', 'claim_id', 'status', 'token_hash',
   'selected_language', 'drive_file_id', 'screenshot_url', 'created_at', 'submitted_at',
   'reviewed_at', 'review_notes', 'error_code', 'retention_deleted_at',
-  'reward_eligible', 'reviewer_email',
+  'reward_eligible', 'reviewer_email', 'country',
 ];
 
 export const CAMPAIGN_COLUMNS = [
@@ -74,6 +76,7 @@ export function buildReviewSnapshot({ participantRows = [], submissionRows = [],
   const submissions = records(SUBMISSION_COLUMNS, submissionRows)
     .filter(row => !technicalCampaign(row.campaign_id));
   const registry = records(CAMPAIGN_COLUMNS, registryRows);
+  submissions.forEach(row => { row.resolvedCountry = attributedCountry(row.country, registry.find(campaign => campaign.campaign_id === row.campaign_id)?.country); });
   const campaignNames = new Map(registry.map(row => [row.campaign_id, row.name || row.campaign_id]));
   const summaries = new Map();
 
@@ -102,6 +105,7 @@ export function buildReviewSnapshot({ participantRows = [], submissionRows = [],
         campaignId: submission.campaign_id,
         campaignName: summary.campaignName,
         selectedLanguage: submission.selected_language,
+        country: submission.resolvedCountry,
         submittedAt: submission.submitted_at || submission.created_at,
         imageAvailable: Boolean(submission.drive_file_id),
       });
@@ -187,9 +191,10 @@ export function planReviewDecision(snapshot, { reviewId, decision, notes, review
     rewardEligible: action === 'approve',
     userId: submission.user_id,
     campaignId: submission.campaign_id,
-    submissionRange: `'Submissions'!A${submission._rowNumber}:Q${submission._rowNumber}`,
+    country: submission.resolvedCountry,
+    submissionRange: `'Submissions'!A${submission._rowNumber}:R${submission._rowNumber}`,
     submissionValues: recordToRow(SUBMISSION_COLUMNS, updatedSubmission),
-    participantRange: `'Participants'!A${participant._rowNumber}:K${participant._rowNumber}`,
+    participantRange: `'Participants'!A${participant._rowNumber}:M${participant._rowNumber}`,
     participantValues: recordToRow(PARTICIPANT_COLUMNS, updatedParticipant),
     campaignRange: updatedCampaign ? `'Campaigns'!A${campaign._rowNumber}:R${campaign._rowNumber}` : '',
     campaignValues: updatedCampaign ? recordToRow(CAMPAIGN_COLUMNS, updatedCampaign) : [],
@@ -248,9 +253,10 @@ export function planReviewUndo(snapshot, { reviewId, reviewerEmail, reviewedAt }
     rewardEligible: false,
     userId: submission.user_id,
     campaignId: submission.campaign_id,
-    submissionRange: `'Submissions'!A${submission._rowNumber}:Q${submission._rowNumber}`,
+    country: submission.resolvedCountry,
+    submissionRange: `'Submissions'!A${submission._rowNumber}:R${submission._rowNumber}`,
     submissionValues: recordToRow(SUBMISSION_COLUMNS, updatedSubmission),
-    participantRange: `'Participants'!A${participant._rowNumber}:K${participant._rowNumber}`,
+    participantRange: `'Participants'!A${participant._rowNumber}:M${participant._rowNumber}`,
     participantValues: recordToRow(PARTICIPANT_COLUMNS, updatedParticipant),
     campaignRange: updatedCampaign ? `'Campaigns'!A${campaign._rowNumber}:R${campaign._rowNumber}` : '',
     campaignValues: updatedCampaign ? recordToRow(CAMPAIGN_COLUMNS, updatedCampaign) : [],

@@ -1,3 +1,5 @@
+import { campaignCountries, attributedCountry } from '../../js/campaign-countries.js';
+
 const numeric = value => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(String(value).replace(/[%,$\s]/g, '').replace(/,/g, ''));
@@ -84,16 +86,19 @@ function count(value) {
 }
 
 export function summarizeCampaignTracker({ participantRanges = [], submissionRanges = [], registryRows = [] } = {}) {
-  const participants = rowsToObjects(mergeRanges(participantRanges, [['user_id', 'status', 'current_campaign_id'], ['brand']]));
+  const participants = rowsToObjects(mergeRanges(participantRanges, [['user_id', 'status', 'current_campaign_id'], ['brand', 'country'], ['updated_at']]));
   const latestParticipantsById = new Map();
   const participantsWithoutId = [];
   participants.forEach(row => {
     const id = String(row.user_id || '').trim();
-    if (id) latestParticipantsById.set(id, row);
+    if (id) {
+      const prior = latestParticipantsById.get(id);
+      if (!prior || (Date.parse(row.updated_at) || 0) >= (Date.parse(prior.updated_at) || 0)) latestParticipantsById.set(id, row);
+    }
     else participantsWithoutId.push(row);
   });
   const currentParticipants = [...participantsWithoutId, ...latestParticipantsById.values()];
-  const submissions = rowsToObjects(mergeRanges(submissionRanges, [['campaign_id'], ['status'], ['selected_language'], ['submitted_at', 'reviewed_at'], ['retention_deleted_at']]));
+  const submissions = rowsToObjects(mergeRanges(submissionRanges, [['campaign_id'], ['status'], ['selected_language'], ['submitted_at', 'reviewed_at'], ['retention_deleted_at'], ['country']]));
   const registry = rowsToObjects(registryRows);
   const registryById = new Map(registry.map(row => [String(row.campaign_id || '').trim(), row]));
   const campaigns = new Map();
@@ -142,6 +147,7 @@ export function summarizeCampaignTracker({ participantRanges = [], submissionRan
         uploading: 0,
         retention_deleted: 0,
         languages: {},
+        country_breakdown: [...campaignCountries(source.country), 'UNKNOWN'].map(countryCode => ({countryCode, audience_size: 0, evidence_submissions: 0, pending_review: 0, approved: 0, rejected: 0, uploading: 0})),
       });
     }
     return campaigns.get(campaignId);
@@ -152,11 +158,15 @@ export function summarizeCampaignTracker({ participantRanges = [], submissionRan
     if (id && !testCampaign(id)) getCampaign(id);
   });
 
+  const countryMetrics = (campaign, rawCountry) => campaign.country_breakdown.find(row => row.countryCode === attributedCountry(rawCountry, campaign.country));
+
   currentParticipants.forEach(row => {
     const campaignId = String(row.current_campaign_id || '').trim();
     if (!campaignId) { metadata.unassignedParticipants += 1; return; }
     if (testCampaign(campaignId)) { metadata.excludedTestParticipants += 1; return; }
-    getCampaign(campaignId).assigned_participants += 1;
+    const campaign = getCampaign(campaignId);
+    campaign.assigned_participants += 1;
+    countryMetrics(campaign, row.country).audience_size += 1;
   });
 
   submissions.forEach(row => {
@@ -164,12 +174,13 @@ export function summarizeCampaignTracker({ participantRanges = [], submissionRan
     if (!campaignId) { metadata.unassignedSubmissions += 1; return; }
     if (testCampaign(campaignId)) { metadata.excludedTestSubmissions += 1; return; }
     const campaign = getCampaign(campaignId);
-    if (String(row.submitted_at || '').trim()) campaign.observed_submissions += 1;
+    const metrics = countryMetrics(campaign, row.country);
+    if (String(row.submitted_at || '').trim()) { campaign.observed_submissions += 1; metrics.evidence_submissions += 1; }
     const status = String(row.status || '').trim().toLowerCase();
-    if (status === 'uploading') campaign.uploading += 1;
-    if (status === 'pending_verification') campaign.observed_pending += 1;
-    if (status === 'successful') campaign.observed_approved += 1;
-    if (['blocked', 'rejected'].includes(status)) campaign.observed_rejected += 1;
+    if (status === 'uploading') { campaign.uploading += 1; metrics.uploading += 1; }
+    if (status === 'pending_verification') { campaign.observed_pending += 1; metrics.pending_review += 1; }
+    if (status === 'successful') { campaign.observed_approved += 1; metrics.approved += 1; }
+    if (['blocked', 'rejected'].includes(status)) { campaign.observed_rejected += 1; metrics.rejected += 1; }
     if (String(row.retention_deleted_at || '').trim()) campaign.retention_deleted += 1;
     [row.submitted_at, row.reviewed_at, row.retention_deleted_at].map(value => String(value || '').trim()).filter(Boolean).forEach(value => {
       if (!metadata.latestActivityAt || value > metadata.latestActivityAt) metadata.latestActivityAt = value;
@@ -178,17 +189,22 @@ export function summarizeCampaignTracker({ participantRanges = [], submissionRan
     if (language) campaign.languages[language] = (campaign.languages[language] || 0) + 1;
   });
 
-  return {
-    campaigns: [...campaigns.values()].map(campaign => ({
+  const result = [...campaigns.values()].map(campaign => ({
       ...campaign,
       audience_size: Math.max(campaign.audience_size, campaign.assigned_participants),
       evidence_submissions: Math.max(campaign.evidence_submissions, campaign.observed_submissions),
       pending_review: Math.max(campaign.pending_review, campaign.observed_pending),
       approved: Math.max(campaign.approved, campaign.observed_approved),
       rejected: Math.max(campaign.rejected, campaign.observed_rejected),
-    })),
-    metadata,
-  };
+    }));
+  for (const campaign of result) {
+    const unknown = campaign.country_breakdown.find(row => row.countryCode === 'UNKNOWN');
+    for (const key of ['audience_size', 'evidence_submissions', 'pending_review', 'approved', 'rejected']) {
+      const observed = campaign.country_breakdown.reduce((total, row) => total + row[key], 0);
+      unknown[key] += Math.max(0, campaign[key] - observed);
+    }
+  }
+  return { campaigns: result, metadata };
 }
 
 export function latestDate(rows = [], headerName) {

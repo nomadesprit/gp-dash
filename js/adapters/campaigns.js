@@ -33,7 +33,7 @@ export function normalizeCampaignRecords(rows = []) {
     ...row,
     ...campaignCountryFields(row.country, unmapped),
     store: normalizeStore(row.store),
-    ...Object.fromEntries(COUNT_FIELDS.map(name => [name, numberValue(row[name])])),
+    ...Object.fromEntries(COUNT_FIELDS.map(name => [name, Array.isArray(row.country_breakdown) && ['audience_size','evidence_submissions','pending_review','approved','rejected'].includes(name) ? Math.max(numberValue(row[name]) || 0, row.country_breakdown.reduce((total, item) => total + (numberValue(item[name]) || 0), 0)) : numberValue(row[name])])),
   })).filter(record => record.countryCodes.length && record.brand && record.store);
   return { records, unmapped: [...unmapped].sort() };
 }

@@ -50,6 +50,7 @@ export async function onRequestPost(context) {
       rewardEligible: plan.rewardEligible,
       userId: plan.userId,
       campaignId: plan.campaignId,
+      country: plan.country,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Review could not be saved.';

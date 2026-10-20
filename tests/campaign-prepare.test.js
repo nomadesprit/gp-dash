@@ -21,6 +21,7 @@ test('campaign proxy keeps the uploader secret server-side', async () => {
   const previousFetch = globalThis.fetch;
   let upstreamHeaders;
   globalThis.fetch = async (url, options) => {
+    if (url.endsWith('/readiness')) return Response.json({countryTrackingVersion:1});
     assert.equal(url, 'https://uploader.example/api/admin/campaigns/prepare');
     upstreamHeaders = options.headers;
     return Response.json({ ok: true, eligibleCount: 2, mailingRows: [] }, { status: 201 });

@@ -27,6 +27,8 @@ export async function onRequestPost(context) {
 
   try {
     const baseUrl = String(context.env.UPLOADER_API_URL || DEFAULT_UPLOADER_URL).replace(/\/$/, '');
+    const readiness = await fetch(`${baseUrl}/api/admin/readiness`, { headers: { 'x-admin-api-key': context.env.UPLOADER_ADMIN_API_KEY }, signal: AbortSignal.timeout(15_000) });
+    if (!readiness.ok || (await readiness.json()).countryTrackingVersion !== 1) return jsonNoStore({ error: 'Country tracking is not ready on the campaign service. No campaign was prepared.' }, 503);
     const upstream = await fetch(`${baseUrl}/api/admin/campaigns/prepare`, {
       method: 'POST',
       headers: {

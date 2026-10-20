@@ -59,3 +59,15 @@ export function extractUserIds(text) {
     header: headerIndex >= 0 ? rows[0][best.index] || null : null,
   };
 }
+
+export function extractAudience(text, selectedCountries, normalizeAudience) {
+  const detected = extractUserIds(text);
+  if (!detected.inputIds.length) return { ...detected, audience: [], countryHeader: null };
+  const rows = parseCsv(text);
+  const countryColumns = rows[0].map((value, index) => /^(country([_ -]?(code|iso))?|geo|iso[_ -]?country)$/i.test(String(value).trim()) ? index : -1).filter(index => index >= 0);
+  if (countryColumns.length > 1) throw new Error('Keep one COUNTRY column in the audience CSV.');
+  const countryIndex = countryColumns[0];
+  const data = rows.slice(detected.header ? 1 : 0).filter(row => String(row[detected.column] ?? '').trim());
+  const audience = data.map(row => ({ userId: String(row[detected.column]).trim(), country: countryIndex === undefined ? '' : String(row[countryIndex] ?? '').trim() }));
+  return { ...detected, audience: normalizeAudience(detected.inputIds, audience, selectedCountries), countryHeader: countryIndex === undefined ? null : rows[0][countryIndex] };
+}

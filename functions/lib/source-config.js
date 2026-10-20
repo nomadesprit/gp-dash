@@ -23,8 +23,8 @@ const SOURCE_RULES = {
   },
   campaign: {
     registryRange: "'Campaigns'!A1:R",
-    participantRanges: ["'Participants'!A1:C", "'Participants'!L1:L"],
-    submissionRanges: ["'Submissions'!C1:C", "'Submissions'!E1:E", "'Submissions'!G1:G", "'Submissions'!K1:L", "'Submissions'!O1:O"],
+    participantRanges: ["'Participants'!A1:C", "'Participants'!L1:M", "'Participants'!J1:J"],
+    submissionRanges: ["'Submissions'!C1:C", "'Submissions'!E1:E", "'Submissions'!G1:G", "'Submissions'!K1:L", "'Submissions'!O1:O", "'Submissions'!R1:R"],
     cadence: 'Operational tracker',
     warningAfterDays: 2,
     retentionDays: 90,
@@ -43,4 +43,4 @@ export function resolvePrivateSources(secretValue) {
 }
 
 export const SOURCE_CACHE_SECONDS = 900;
-export const DASHBOARD_CACHE_VERSION = 'source-coverage-v2';
+export const DASHBOARD_CACHE_VERSION = 'country-tracking-v1';

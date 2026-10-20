@@ -49,6 +49,7 @@ test('review queue exposes review context without Drive or token identifiers', (
     reviewId: 'submission-1', userId: '95375019', campaignId: 'pilot_20260917_2',
     campaignName: 'Internal pilot', selectedLanguage: 'pt', submittedAt: '2026-09-22T10:00:00Z',
     imageAvailable: true,
+    country: 'UNKNOWN',
   }]);
   assert.equal(JSON.stringify(snapshot.items).includes('private-drive-id'), false);
   assert.equal(JSON.stringify(snapshot.items).includes('current-token'), false);
@@ -119,8 +120,8 @@ test('approval atomically marks reward eligibility and permanently blocks the cu
   });
   const submission = Object.fromEntries(SUBMISSION_COLUMNS.map((column, index) => [column, plan.submissionValues[index]]));
   const participant = Object.fromEntries(PARTICIPANT_COLUMNS.map((column, index) => [column, plan.participantValues[index]]));
-  assert.equal(plan.submissionRange, "'Submissions'!A2:Q2");
-  assert.equal(plan.participantRange, "'Participants'!A3:K3");
+  assert.equal(plan.submissionRange, "'Submissions'!A2:R2");
+  assert.equal(plan.participantRange, "'Participants'!A3:M3");
   assert.equal(plan.campaignRange, "'Campaigns'!A2:R2");
   assert.equal(submission.status, 'successful');
   assert.equal(submission.reward_eligible, 'yes');
