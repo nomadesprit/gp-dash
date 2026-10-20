@@ -1164,7 +1164,7 @@ function openCampaignDialog() {
   state.currentUniqueIdCount = 0;
   state.preparedCampaign = null;
   $('#user-id-file').value = '';
-  $('#file-status').textContent = 'Choose one combined audience CSV for the selected countries. The USERID column may appear anywhere.';
+  $('#file-status').textContent = 'Multi-country: include USERID and COUNTRY (e.g. BR, CL). Single-country: COUNTRY may be omitted.';
   $('#prepare-campaign').disabled = true;
   $('#rotate-links').checked = false;
   clearCampaignResult('Upload the Metabase CSV to begin.');
