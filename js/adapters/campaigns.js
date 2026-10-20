@@ -1,12 +1,14 @@
 import { parseCsv, rowsToObjects, numberValue } from './csv.js';
-import { normalizeCountry, normalizeStore } from '../normalization.js';
+import { normalizeStore } from '../normalization.js';
+
+import { campaignCountryFields, campaignCountries } from '../campaign-countries.js';
 
 const COUNT_FIELDS = [
   'audience_size', 'emails_sent', 'delivered', 'evidence_submissions',
   'pending_review', 'approved', 'rejected', 'rewards_granted', 'verified_review_count',
 ];
 
-export const isTestCampaign = campaign => campaign.countryCode === 'TEST' || campaign.is_test === true;
+export const isTestCampaign = campaign => campaignCountries(campaign.countryCodes ?? campaign.country ?? campaign.countryCode).includes('TEST') || campaign.is_test === true;
 
 export function parseCampaigns(csv, requiredSchema) {
   const rows = parseCsv(csv);
@@ -18,10 +20,10 @@ export function parseCampaigns(csv, requiredSchema) {
   const records = rowsToObjects(rows).map(row => ({
     ...row,
     evidence_submissions: row.evidence_submissions ?? row.typeform_submissions,
-    countryCode: normalizeCountry(row.country, unmapped),
+    ...campaignCountryFields(row.country, unmapped),
     store: normalizeStore(row.store),
     ...Object.fromEntries(COUNT_FIELDS.map(name => [name, numberValue(name === 'evidence_submissions' ? (row.evidence_submissions ?? row.typeform_submissions) : row[name])])),
-  })).filter(record => record.countryCode);
+  })).filter(record => record.countryCodes.length);
   return { records, errors: [], unmapped: [...unmapped].sort() };
 }
 
@@ -29,16 +31,20 @@ export function normalizeCampaignRecords(rows = []) {
   const unmapped = new Set();
   const records = rows.map(row => ({
     ...row,
-    countryCode: normalizeCountry(row.country, unmapped),
+    ...campaignCountryFields(row.country, unmapped),
     store: normalizeStore(row.store),
     ...Object.fromEntries(COUNT_FIELDS.map(name => [name, numberValue(row[name])])),
-  })).filter(record => record.countryCode && record.brand && record.store);
+  })).filter(record => record.countryCodes.length && record.brand && record.store);
   return { records, unmapped: [...unmapped].sort() };
 }
 
 export const isReservedCampaignId = value => /(^|[_-])(test|smoke)([_-]|$)/i.test(String(value || ''));
 
 export function suggestCampaignId(brand, store, country, date) {
+  const codes = campaignCountries(country);
+  let digest = 2166136261;
+  for (const char of codes.join(',')) digest = Math.imul(digest ^ char.charCodeAt(0), 16777619);
+  country = codes.length > 1 ? `multi_${codes.length}_${(digest >>> 0).toString(36)}` : codes[0] || country;
   if (country === 'TEST') return `pilot_${date}`;
   return [brand, store, country, date]
     .map(value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''))
@@ -61,7 +67,7 @@ export function summarizeScreenshotTracker(participants = [], submissions = [], 
         name: String(source.name || campaignId).trim(),
         brand: String(source.brand || '').trim(),
         store: normalizeStore(source.store),
-        countryCode: normalizeCountry(source.country),
+        ...campaignCountryFields(source.country),
         country: String(source.country || '').trim(),
         status: String(source.status || 'active').trim(),
         start_date: String(source.start_date || '').trim(),

@@ -173,3 +173,16 @@ export function percentage(numerator, denominator) {
 export function sum(records, field) {
   return records.reduce((total, record) => total + (Number(record[field]) || 0), 0);
 }
+
+
+/** Sum country plans only after rounding each country's requirement independently. */
+export function summarizeCountryPlans(rows) {
+  const total = key => rows.reduce((n, row) => n + (row[key] ?? 0), 0);
+  return {
+    countries: rows.length,
+    fiveStarRatings: total('fiveStarRatings'),
+    emails: total('emails'),
+    missingRatings: rows.filter(row => row.fiveStarRatings === null).length,
+    missingEmails: rows.filter(row => row.emails === null).length,
+  };
+}

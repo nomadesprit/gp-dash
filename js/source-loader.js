@@ -7,7 +7,7 @@ import {
 import { parseAppFollowTabs } from './adapters/appfollow.js';
 import { parsePopupSnapshot, aggregatePopup, parseDailyRedirects, parsePopupCountryRates, parsePopupHighLevelSummary, normalizeTicketSummary } from './adapters/popup.js';
 import { parseVolumeSnapshot } from './adapters/volume.js';
-import { normalizeCampaignRecords } from './adapters/campaigns.js';
+import { normalizeCampaignRecords } from './adapters/campaigns.js?v=20261020-countries';
 
 async function loadServerApi() {
   const response = await fetch(CONFIG.runtime.serverApiUrl, { cache: 'no-store', credentials: 'same-origin' });

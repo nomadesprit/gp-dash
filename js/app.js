@@ -1,12 +1,13 @@
 import { CONFIG } from './config.js';
-import { loadDashboardData } from './source-loader.js';
+import { loadDashboardData } from './source-loader.js?v=20261020-countries';
 import { recordAtPeriod } from './adapters/appfollow.js';
 import { extractUserIds } from './adapters/csv.js';
-import { isReservedCampaignId, isTestCampaign, suggestCampaignId } from './adapters/campaigns.js';
+import { isReservedCampaignId, isTestCampaign, suggestCampaignId, normalizeCampaignRecords } from './adapters/campaigns.js?v=20261020-countries';
+import { MAX_CAMPAIGN_COUNTRIES, campaignIncludesCountry, serializeCampaignCountries } from './campaign-countries.js';
 import { applyMinimumWeeklyDownloads, estimate30DayDownloads } from './adapters/volume.js?v=20261005-target';
 import { toCsv } from './campaign-files.js';
 import { countryName } from './normalization.js';
-import { campaignProgress, ratingTargetPlan, percentage, sum } from './calculations.js?v=20261005-target';
+import { campaignProgress, ratingTargetPlan, summarizeCountryPlans, percentage, sum } from './calculations.js?v=20261005-target';
 import { formatDashboardDate, formatDashboardDateTime } from './date-format.js';
 
 const $ = selector => document.querySelector(selector);
@@ -24,6 +25,9 @@ const state = {
   selectedKey: null,
   drafts: [],
   forecastInputs: new Map(),
+  campaignCountries: new Set(),
+  campaignScope: '',
+  preparing: false,
   currentIds: [],
   currentUniqueIdCount: 0,
   preparedCampaign: null,
@@ -45,7 +49,7 @@ const state = {
 const recordKey = record => `${record.brand}|${record.store}|${record.countryCode}`;
 const lookupPopup = record => state.data.popupRecords.find(item => recordKey(item) === recordKey(record));
 const lookupVolume = record => state.data.volumeRecords.find(item => recordKey(item) === recordKey(record));
-const campaignFor = record => [...(state.data?.campaigns || []), ...state.drafts].filter(item => recordKey(item) === recordKey(record));
+const campaignFor = record => [...(state.data?.campaigns || []), ...state.drafts].filter(item => item.brand === record.brand && item.store === record.store && campaignIncludesCountry(item, record.countryCode));
 
 function fillSelect(element, values, selected, labeler = value => value) {
   element.innerHTML = '';
@@ -82,7 +86,7 @@ function initializeFilters() {
   $('#volume-filter').max = slider.max;
   $('#volume-filter').step = slider.step;
   $('#volume-filter').value = state.filters.minWeeklyDownloads;
-  fillSelect($('#draft-country'), [...countryCodes, 'TEST'], state.selectedKey?.split('|').at(-1) || countryCodes[0], value => value === 'TEST' ? 'Test cohort (TEST)' : `${countryName(value)} (${value})`);
+
 }
 
 function baseScopedRecords() {
@@ -200,7 +204,7 @@ function tableRow(record) {
     <td><span class="metric-main">${gap ? `−${gap.toFixed(3)}` : 'On / above'}</span><span class="submetric">to ${Number(state.filters.target).toFixed(2)}</span></td>
     <td>${Number.isFinite(volume?.weeklyDownloads) ? `<span class="metric-main">${volume.weeklyDownloadsExact ? '' : '≈ '}${formatInt(volume.weeklyDownloads)}</span><span class="submetric">${volume.weeklyDownloadsExact ? '7-day total' : 'MTD run-rate'} · through ${esc(formatDashboardDate(volume.asOfDate || 'unknown'))}</span>` : '<span class="metric-main">—</span><span class="submetric">Volume unavailable</span>'}</td>
     <td>${popup ? `<span class="metric-main">${formatInt(popup.accepted)} redirects</span><span class="submetric">${formatRate(popup.acceptanceRate)} of ${formatInt(popup.show)} shown · n=${formatInt(popup.popupSentimentSample)} rated</span>` : '<span class="metric-main">—</span><span class="submetric">No country sample</span>'}</td>
-    <td>${campaigns.length ? `<span class="badge neutral">${esc(campaigns.at(-1).localOnly ? 'Local draft' : campaigns.at(-1).status || 'Tracked')}</span><span class="submetric">Audience ${formatInt(sum(campaigns, 'audience_size'))} · evidence ${formatInt(sum(campaigns, 'evidence_submissions'))}</span>` : campaignEmpty}</td>
+    <td>${campaigns.length ? `<span class="badge neutral">${esc(campaigns.at(-1).localOnly ? 'Local draft' : campaigns.at(-1).status || 'Tracked')}</span><span class="submetric">${campaigns.some(campaign => campaign.countryCodes?.length > 1) ? 'Campaign-wide · ' : ''}Audience ${formatInt(sum(campaigns, 'audience_size'))} · evidence ${formatInt(sum(campaigns, 'evidence_submissions'))}</span>` : campaignEmpty}</td>
     <td><span class="badge ${forecastState === 'estimate' ? 'assumption' : forecastState === 'target-reached' ? 'ready' : 'neutral'}">${esc(forecastState)}</span><span class="submetric">${forecastState === 'unavailable' ? 'Download estimate needed' : forecastState === 'target-reached' ? 'No additional ratings needed' : 'Five-star rating model'}</span></td>
     <td><span class="quality-flag">Freshness gap</span><span class="submetric">${quality}</span></td>
   </tr>`;
@@ -281,7 +285,7 @@ function renderCampaignFunnel(record) {
   }
   const campaign = campaigns.at(-1);
   const base = campaign.audience_size || 1;
-  $('#campaign-funnel').innerHTML = [
+  $('#campaign-funnel').innerHTML = (campaign.countryCodes?.length > 1 ? `<p class="explain">Combined totals for ${esc(campaign.name || campaign.campaign_id)} across ${campaign.countryCodes.length} countries. Participant countries are not recorded; these counts are not attributed to ${esc(countryName(record.countryCode))}.</p>` : '') + [
     funnelRow('Audience', campaign.audience_size, base), funnelRow('Sent', campaign.emails_sent, base),
     funnelRow('Delivered', campaign.delivered, base), funnelRow('Screenshot sent', campaign.evidence_submissions, base),
     funnelRow('Pending check', campaign.pending_review, base), funnelRow('Evidence accepted', campaign.approved, base),
@@ -367,7 +371,7 @@ function renderDetail(record) {
 }
 
 function renderCampaigns() {
-  const allRecords = [...state.data.campaigns, ...state.drafts];
+  const allRecords = [...state.data.campaigns, ...state.drafts].filter(campaign => campaign.brand === state.filters.brand && campaign.store === state.filters.store && (isTestCampaign(campaign) || state.filters.country === 'all' || campaignIncludesCountry(campaign, state.filters.country)));
   const records = allRecords.filter(campaign => !isTestCampaign(campaign));
   const testRecords = allRecords.filter(isTestCampaign);
   const progress = records.map(campaign => ({ campaign, forecast: campaignProgress(campaign) }));
@@ -401,7 +405,7 @@ function renderCampaigns() {
       const progressWidth = Number.isFinite(forecast.completionRate) ? Math.max(0, Math.min(100, forecast.completionRate * 100)) : 0;
       return `<article class="campaign-record">
         <div class="panel-heading"><h3>${esc(campaign.name || campaign.campaign_id)}</h3><span class="badge ${forecast.state === 'observed-pace' ? 'assumption' : 'neutral'}">${campaign.localOnly ? 'Local draft' : esc(campaign.status || 'Tracked')}</span></div>
-        <p>${campaign.countryCode ? `${esc(countryName(campaign.countryCode))} · ` : ''}${esc(formatDashboardDate(campaign.start_date || 'No start'))} → ${esc(formatDashboardDate(campaign.end_date || 'No end'))} · ${pace}</p>
+        <p>${esc((campaign.countryCodes || []).map(countryName).join(', '))} · ${esc(formatDashboardDate(campaign.start_date || 'No start'))} → ${esc(formatDashboardDate(campaign.end_date || 'No end'))} · ${pace}</p>
         <div class="campaign-metrics">
           <div><strong>${formatInt(campaign.audience_size)}</strong><span>audience</span></div>
           <div><strong>${formatInt(campaign.evidence_submissions)}</strong><span>submitted evidence</span></div>
@@ -409,7 +413,7 @@ function renderCampaigns() {
           <div><strong>${formatInt(campaign.rewards_granted)}</strong><span>rewards recorded</span></div>
         </div>
         <div class="campaign-progress-bar" role="img" aria-label="${formatRate(forecast.completionRate)} of audience has submitted evidence"><i style="width:${progressWidth}%"></i></div>
-        <p class="explain">Evidence accepted: ${formatInt(campaign.approved)} · blocked/rejected: ${formatInt(campaign.rejected)} · verified external ratings: not inferred.</p>
+        <p class="explain">${campaign.countryCodes?.length > 1 ? 'Combined campaign totals · country outcome breakdown unavailable. ' : ''}Evidence accepted: ${formatInt(campaign.approved)} · blocked/rejected: ${formatInt(campaign.rejected)} · verified external ratings: not inferred.</p>
       </article>`;
     }).join('');
   }
@@ -975,19 +979,48 @@ function bindEvents() {
   $('#close-campaign').addEventListener('click', () => $('#campaign-dialog').close());
   $('#user-id-file').addEventListener('change', handleUserIdFile);
   $('#draft-id').addEventListener('input', () => { validateCampaignId(); clearCampaignResult(); });
-  $('#draft-name').addEventListener('input', buildCampaignMessage);
-  $('#draft-country').addEventListener('change', () => {
-    const idField = $('#draft-id');
-    if (idField.value === idField.dataset.suggestedId) {
-      idField.value = suggestedCampaignId();
-      idField.dataset.suggestedId = idField.value;
-    }
-    validateCampaignId();
-    clearCampaignResult();
-    buildCampaignMessage();
+  $('#draft-countries').addEventListener('change', event => {
+    const input = event.target.closest('[data-campaign-country]');
+    if (!input) return;
+    const code = input.value;
+    if (input.checked) {
+      if (code === 'TEST') state.campaignCountries.clear();
+      else state.campaignCountries.delete('TEST');
+      if (state.campaignCountries.size < MAX_CAMPAIGN_COUNTRIES) state.campaignCountries.add(code);
+    } else state.campaignCountries.delete(code);
+    campaignSelectionChanged();
   });
-  $('#draft-start').addEventListener('input', buildCampaignMessage);
-  $('#draft-end').addEventListener('input', buildCampaignMessage);
+  $('#selected-countries').addEventListener('click', event => {
+    const button = event.target.closest('[data-remove-country]');
+    if (!button) return;
+    state.campaignCountries.delete(button.dataset.removeCountry);
+    campaignSelectionChanged();
+  });
+  $('#clear-campaign-countries').addEventListener('click', () => { state.campaignCountries.clear(); campaignSelectionChanged(); });
+  $('#draft-country-search').addEventListener('input', renderCountryOptions);
+  $('#campaign-plan-target').addEventListener('input', () => renderCampaignPlan());
+  $('#campaign-plan-rows').addEventListener('input', event => {
+    const input = event.target.closest('[data-plan-downloads]');
+    if (!input) return;
+    const record = campaignRatingRecords().find(row => row.countryCode === input.dataset.planDownloads);
+    if (!record) return;
+    state.forecastInputs.set(forecastKey(record), { downloads30Days: input.value === '' ? '' : Number(input.value), downloadsManual: true });
+    renderCampaignPlan(false);
+  });
+  $('#campaign-plan-rows').addEventListener('click', event => {
+    const button = event.target.closest('[data-plan-reset]');
+    if (!button) return;
+    const record = campaignRatingRecords().find(row => row.countryCode === button.dataset.planReset);
+    if (!record) return;
+    const volume = lookupVolume(record);
+    state.forecastInputs.set(forecastKey(record), { downloads30Days: estimate30DayDownloads(volume?.monthlyNewInstalls, volume?.asOfDate) ?? '', downloadsManual: false });
+    renderCampaignPlan();
+  });
+  for (const id of ['draft-name', 'draft-start', 'draft-end']) {
+    $(`#${id}`).addEventListener('input', () => { clearCampaignResult(); buildCampaignMessage(); });
+  }
+  $('#plan-campaign').addEventListener('click', openCampaignDialog);
+  $('#campaign-dialog').addEventListener('cancel', event => { if (state.preparing) event.preventDefault(); });
   $('#rotate-links').addEventListener('change', clearCampaignResult);
   $('#copy-message').addEventListener('click', copyCampaignMessage);
   $('#download-mailing').addEventListener('click', downloadMailingCsv);
@@ -1027,9 +1060,77 @@ function selectRow(row) {
   if (matchMedia('(max-width: 1180px)').matches) $('#country-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function campaignRatingRecords() {
+  return state.data.ratingData.records
+    .filter(record => record.brand === state.filters.brand && record.store === state.filters.store)
+    .map(record => recordAtPeriod(record, state.filters.period));
+}
+
+function renderCountryOptions() {
+  const query = $('#draft-country-search').value.trim().toLowerCase();
+  const codes = [...new Set(campaignRatingRecords().map(record => record.countryCode))].sort((a, b) => countryName(a).localeCompare(countryName(b)));
+  codes.push('TEST');
+  const visible = codes.filter(code => `${countryName(code)} ${code}`.toLowerCase().includes(query));
+  $('#draft-countries').innerHTML = visible.map(code => `<label class="country-option"><input type="checkbox" data-campaign-country value="${esc(code)}" ${state.campaignCountries.has(code) ? 'checked' : ''} ${!state.campaignCountries.has(code) && code !== 'TEST' && state.campaignCountries.size >= MAX_CAMPAIGN_COUNTRIES ? 'disabled' : ''}><span>${esc(countryName(code))}<small>${esc(code)}${code === 'TEST' ? ' · internal only' : ''}</small></span></label>`).join('') || '<p class="muted">No countries match this search.</p>';
+}
+
+function renderCampaignSelection() {
+  $('#selected-countries').innerHTML = [...state.campaignCountries].sort().map(code => `<button type="button" class="country-chip" data-remove-country="${esc(code)}" aria-label="Remove ${esc(countryName(code))}">${esc(countryName(code))} <span aria-hidden="true">×</span></button>`).join('');
+  $('#campaign-country-status').textContent = state.campaignCountries.has('TEST') ? 'Internal test cohort selected. Production countries are excluded.' : `${state.campaignCountries.size} of ${MAX_CAMPAIGN_COUNTRIES} countries selected · audience and outcomes are combined for this campaign.`;
+  $('#prepare-campaign').disabled = !state.currentIds.length || !state.campaignCountries.size;
+}
+
+function campaignSelectionChanged() {
+  const idField = $('#draft-id');
+  if (idField.value === idField.dataset.suggestedId) {
+    idField.value = suggestedCampaignId();
+    idField.dataset.suggestedId = idField.value;
+  }
+  validateCampaignId();
+  clearCampaignResult();
+  renderCountryOptions();
+  renderCampaignSelection();
+  renderCampaignPlan();
+  buildCampaignMessage();
+}
+
+function renderCampaignPlan(rebuildRows = true) {
+  const target = $('#campaign-plan-target').value;
+  const records = campaignRatingRecords();
+  const codes = [...state.campaignCountries].filter(code => code !== 'TEST').sort((a, b) => countryName(a).localeCompare(countryName(b)));
+  const plans = codes.map(code => {
+    const record = records.find(row => row.countryCode === code);
+    const inputs = record ? forecastDefaults(record) : { downloads30Days: '', downloadsManual: false };
+    const volume = record && lookupVolume(record);
+    return { code, record, inputs, volume, ...ratingTargetPlan({ currentRating: record?.current, target, ...inputs }) };
+  });
+  $('#campaign-plan-period').textContent = `Ratings: ${state.filters.period} · ${state.filters.brand} · ${state.filters.store}. Country selection is independent of the table’s search and volume filter. Edit download estimates below when exact totals are available.`;
+  if (rebuildRows) {
+    $('#campaign-plan-rows').innerHTML = plans.map(plan => `<tr><td data-label="Country"><strong>${esc(countryName(plan.code))}</strong><small>${esc(plan.code)}</small></td><td data-label="Current rating">${formatSourceRating(plan.record?.current)}</td><td data-label="30-day downloads"><input type="number" min="0" step="1" data-plan-downloads="${esc(plan.code)}" value="${esc(plan.inputs.downloads30Days)}" aria-label="30-day downloads for ${esc(countryName(plan.code))}"><small>${plan.inputs.downloadsManual ? 'Manual total' : estimate30DayDownloads(plan.volume?.monthlyNewInstalls, plan.volume?.asOfDate) !== null ? `MTD estimate · ${esc(formatDashboardDate(plan.volume.asOfDate))}` : 'Downloads needed'}</small><button type="button" class="text-button" data-plan-reset="${esc(plan.code)}" ${estimate30DayDownloads(plan.volume?.monthlyNewInstalls, plan.volume?.asOfDate) === null ? 'disabled' : ''}>Use source estimate</button></td><td data-label="5★ needed" data-plan-stars="${esc(plan.code)}">${formatInt(plan.fiveStarRatings)}<small>${plan.ratingState === 'target-reached' ? 'Target reached' : plan.ratingState === 'unreachable' ? 'Target unreachable' : plan.fiveStarRatings === null ? 'Input needed' : 'Estimated'}</small></td><td data-label="Planned emails" data-plan-emails="${esc(plan.code)}">${formatInt(plan.emails)}</td></tr>`).join('') || `<tr><td colspan="5">${state.campaignCountries.has('TEST') ? 'Internal test cohort: no country rating or email plan.' : 'Select countries above to build your campaign plan.'}</td></tr>`;
+  } else {
+    plans.forEach(plan => {
+      $(`[data-plan-stars="${plan.code}"]`).innerHTML = `${formatInt(plan.fiveStarRatings)}<small>${plan.ratingState === 'target-reached' ? 'Target reached' : plan.ratingState === 'unreachable' ? 'Target unreachable' : plan.fiveStarRatings === null ? 'Input needed' : 'Estimated'}</small>`;
+      $(`[data-plan-emails="${plan.code}"]`).textContent = formatInt(plan.emails);
+      if (plan.inputs.downloadsManual) $(`[data-plan-downloads="${plan.code}"]`).nextElementSibling.textContent = 'Manual total';
+    });
+  }
+  const totals = summarizeCountryPlans(plans);
+  $('#campaign-plan-totals').innerHTML = plans.length ? `<div><span>Selected countries</span><strong>${totals.countries}</strong></div><div><span>5★ needed${totals.missingRatings ? ' · partial' : ''}</span><strong>${formatInt(totals.missingRatings === totals.countries ? null : totals.fiveStarRatings)}</strong><small>${totals.missingRatings ? `${totals.missingRatings} country plan(s) unavailable` : 'Sum of country requirements'}</small></div><div><span>Planned emails${totals.missingEmails ? ' · partial' : ''}</span><strong>${formatInt(totals.missingEmails === totals.countries ? null : totals.emails)}</strong><small>${totals.missingEmails ? `${totals.missingEmails} country plan(s) unavailable` : 'Sum of country email plans'}</small></div>` : '';
+}
+
 function openCampaignDialog() {
   const record = selectedRecord(scopedRecords());
-  if (record) $('#draft-country').value = record.countryCode;
+  if (state.preparing) return;
+  const scope = `${state.filters.brand}|${state.filters.store}`;
+  if (state.campaignScope !== scope) {
+    state.campaignCountries = new Set(record ? [record.countryCode] : []);
+    state.campaignScope = scope;
+  }
+  $('#draft-country-search').value = '';
+  $('#campaign-plan-target').value = state.filters.target;
+  renderCountryOptions();
+  renderCampaignSelection();
+  renderCampaignPlan();
   $('#draft-brand').value = state.filters.brand;
   $('#draft-store').value = state.filters.store;
   if (!$('#draft-start').value) $('#draft-start').value = new Date().toISOString().slice(0, 10);
@@ -1040,7 +1141,7 @@ function openCampaignDialog() {
   state.currentUniqueIdCount = 0;
   state.preparedCampaign = null;
   $('#user-id-file').value = '';
-  $('#file-status').textContent = 'Choose a CSV. The USERID column may appear anywhere.';
+  $('#file-status').textContent = 'Choose one combined audience CSV for the selected countries. The USERID column may appear anywhere.';
   $('#prepare-campaign').disabled = true;
   $('#rotate-links').checked = false;
   clearCampaignResult('Upload the Metabase CSV to begin.');
@@ -1050,7 +1151,7 @@ function openCampaignDialog() {
 
 function suggestedCampaignId() {
   const campaignDate = ($('#draft-start').value || new Date().toISOString().slice(0, 10)).replaceAll('-', '');
-  return suggestCampaignId(state.filters.brand, state.filters.store, $('#draft-country').value, campaignDate);
+  return suggestCampaignId(state.filters.brand, state.filters.store, [...state.campaignCountries], campaignDate);
 }
 
 function validateCampaignId() {
@@ -1061,9 +1162,9 @@ function validateCampaignId() {
 }
 
 function buildCampaignMessage() {
-  const code = $('#draft-country').value;
+  const countries = [...state.campaignCountries].sort().map(code => `${countryName(code)} (${code})`).join(', ') || '[select countries]';
   const dates = [$('#draft-start').value || '[start date]', $('#draft-end').value || '[end date]'].map(formatDashboardDate);
-  $('#campaign-message').value = `Campaign: ${$('#draft-name').value.trim() || 'Rating-neutral feedback campaign'}\nCountry: ${countryName(code)} (${code})\nPeriod: ${dates[0]} to ${dates[1]}\n\nInvite eligible users to share honest product feedback. If they independently choose to leave a store rating or review, participation, support, and any reward eligibility must not depend on doing so, on its star value, or on whether it is positive or negative.\n\nProvide each participant only their unique secure screenshot-upload link issued by the campaign service. Do not share the base uploader URL as a substitute for a secure link.\n\nAudience file: ${state.currentUniqueIdCount ? `${state.currentUniqueIdCount.toLocaleString()} unique IDs ready for eligibility checking` : '[upload Metabase USERID CSV]'}. IDs are sent only when an operator prepares the campaign and are not stored in the dashboard.`;
+  $('#campaign-message').value = `Campaign: ${$('#draft-name').value.trim() || 'Rating-neutral feedback campaign'}\nCountries: ${countries}\nPeriod: ${dates[0]} to ${dates[1]}\n\nInvite eligible users to share honest product feedback. If they independently choose to leave a store rating or review, participation, support, and any reward eligibility must not depend on doing so, on its star value, or on whether it is positive or negative.\n\nProvide each participant only their unique secure screenshot-upload link issued by the campaign service. Do not share the base uploader URL as a substitute for a secure link.\n\nAudience file: ${state.currentUniqueIdCount ? `${state.currentUniqueIdCount.toLocaleString()} unique IDs ready for eligibility checking` : '[upload Metabase USERID CSV]'}. IDs are sent only when an operator prepares the campaign and are not stored in the dashboard.`;
 }
 
 function handleUserIdFile(event) {
@@ -1077,7 +1178,7 @@ function handleUserIdFile(event) {
     const column = detected.header ? `“${detected.header}”` : detected.column !== null ? `column ${detected.column + 1}` : 'no column';
     const duplicateCount = Math.max(0, detected.inputIds.length - detected.ids.length);
     $('#file-status').textContent = `${formatInt(detected.ids.length)} unique IDs detected in ${column}${duplicateCount ? ` · ${formatInt(duplicateCount)} duplicate row${duplicateCount === 1 ? '' : 's'} will be reported` : ''}. Nothing has been uploaded yet.`;
-    $('#prepare-campaign').disabled = !detected.inputIds.length;
+    $('#prepare-campaign').disabled = !detected.inputIds.length || !state.campaignCountries.size;
     clearCampaignResult(detected.inputIds.length ? 'Ready to check eligibility and create secure links.' : 'No USERIDs were detected. Check the CSV column.');
     buildCampaignMessage();
   };
@@ -1141,7 +1242,8 @@ function showPreparedCampaign(result) {
 }
 
 function updateCampaignInView(campaign) {
-  const normalized = { ...campaign, countryCode: $('#draft-country').value, store: state.filters.store };
+  const normalized = normalizeCampaignRecords([campaign]).records[0];
+  if (!normalized) return;
   const index = state.data.campaigns.findIndex(row => row.campaign_id === campaign.campaign_id);
   if (index >= 0) state.data.campaigns[index] = { ...state.data.campaigns[index], ...normalized };
   else state.data.campaigns.push(normalized);
@@ -1149,8 +1251,12 @@ function updateCampaignInView(campaign) {
 
 async function prepareCampaign(event) {
   event.preventDefault();
-  if (!state.currentIds.length || !event.currentTarget.reportValidity()) return;
+  if (state.preparing || !state.currentIds.length || !event.currentTarget.reportValidity()) return;
+  if (!state.campaignCountries.size) { $('#campaign-country-status').textContent = 'Select at least one country to prepare this campaign.'; $('#draft-country-search').focus(); return; }
   const button = $('#prepare-campaign');
+  state.preparing = true;
+  const controls = [...$('#campaign-form').elements].map(control => [control, control.disabled]);
+  controls.forEach(([control]) => { control.disabled = true; });
   button.disabled = true;
   button.textContent = 'Preparing…';
   clearCampaignResult('Checking global participation and generating secure links…');
@@ -1160,7 +1266,7 @@ async function prepareCampaign(event) {
       body: JSON.stringify({
         campaign: {
           campaignId: $('#draft-id').value.trim(), name: $('#draft-name').value.trim(),
-          brand: state.filters.brand, store: state.filters.store, country: $('#draft-country').value,
+          brand: state.filters.brand, store: state.filters.store, country: serializeCampaignCountries([...state.campaignCountries]),
           startDate: $('#draft-start').value, endDate: $('#draft-end').value,
         },
         userIds: state.currentIds,
@@ -1171,15 +1277,21 @@ async function prepareCampaign(event) {
     if (!response.ok) throw new Error(result.message || result.error || `Campaign service returned ${response.status}`);
     showPreparedCampaign(result);
     updateCampaignInView(result.campaign);
-    renderCampaigns();
+    render();
     if (result.mailingRows.length) downloadMailingCsv();
   } catch (error) {
     const status = $('#campaign-prepare-status');
     status.className = 'campaign-prepare-status error';
-    status.textContent = `Campaign was not prepared: ${error.message}`;
+    status.textContent = `Preparation could not be confirmed: ${error.message}. Retry with the same campaign details and CSV to recover the result.`;
   } finally {
-    button.disabled = !state.currentIds.length;
+    state.preparing = false;
+    controls.forEach(([control, disabled]) => { control.disabled = disabled; });
+    button.disabled = !state.currentIds.length || !state.campaignCountries.size;
     button.textContent = 'Check eligibility & prepare';
+    if (state.preparedCampaign) {
+      $('#download-mailing').disabled = !state.preparedCampaign.mailingRows.length;
+      $('#download-exclusions').disabled = !state.preparedCampaign.excludedRows.length;
+    }
   }
 }
 

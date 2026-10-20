@@ -1,3 +1,5 @@
+import { serializeCampaignCountries } from '../../js/campaign-countries.js';
+
 export const MAX_CAMPAIGN_USERS = 5000;
 export const MAX_CAMPAIGN_BODY_BYTES = 512 * 1024;
 
@@ -18,7 +20,7 @@ export function validateCampaignRequest(input) {
       name: requiredText(campaign.name, 'Campaign name', 120),
       brand: requiredText(campaign.brand, 'Brand', 80),
       store: requiredText(campaign.store, 'Store', 40),
-      country: requiredText(campaign.country, 'Country', 80),
+      country: serializeCampaignCountries(campaign.countries ?? campaign.country),
       startDate: String(campaign.startDate || '').trim(),
       endDate: String(campaign.endDate || '').trim(),
     },

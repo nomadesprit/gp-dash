@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261005-target">
+  <link rel="stylesheet" href="css/styles.css?v=20261020-countries">
 </head>
 <body>
   <a class="skip-link" href="#country-table">Skip to country priorities</a>
@@ -134,6 +134,7 @@
         <div class="forecast-heading-state"><span id="forecast-country-label">Select a country</span><span class="badge neutral" id="forecast-state">Unavailable</span></div>
       </div>
       <p class="muted">Five-star ratings needed for the selected country, alongside your download-based email plan.</p>
+      <button type="button" class="secondary-button" id="plan-campaign">Plan a multi-country campaign</button>
       <div class="forecast-layout">
         <form id="forecast-form" class="forecast-form">
           <fieldset><legend>Country rating target</legend>
@@ -206,7 +207,7 @@
   <dialog id="campaign-dialog" aria-labelledby="campaign-dialog-title">
     <form class="dialog-shell" id="campaign-form">
       <div class="section-heading compact">
-        <div><p class="kicker">Protected workflow</p><h2 id="campaign-dialog-title">Launch a campaign</h2></div>
+        <div><p class="kicker">Protected workflow</p><h2 id="campaign-dialog-title">Plan &amp; launch a campaign</h2></div>
         <button class="icon-button" type="button" id="close-campaign" aria-label="Close dialog">×</button>
       </div>
       <p class="notice subtle">Eligibility and rewards must not depend on whether a user leaves a positive, negative, or any particular rating.</p>
@@ -215,13 +216,26 @@
         <label>Campaign name<input id="draft-name" required value="Rating-neutral feedback campaign"></label>
         <label>Brand<input id="draft-brand" readonly></label>
         <label>Store<input id="draft-store" readonly></label>
-        <label>Country<select id="draft-country" required></select><span class="field-help">Choose Test cohort for an internal upload-flow pilot. Its submissions appear separately from country ratings and production campaign totals.</span></label>
+        <fieldset class="country-picker full-width"><legend>Campaign countries</legend>
+          <p class="field-help">One campaign, one audience file, multiple countries. Select up to 26 countries. Test cohort is a separate internal pilot.</p>
+          <div class="country-picker-toolbar"><input id="draft-country-search" type="search" placeholder="Search countries" aria-label="Search campaign countries"><button type="button" class="text-button" id="clear-campaign-countries">Clear selection</button></div>
+          <div class="selected-countries" id="selected-countries" aria-live="polite"></div>
+          <div id="draft-countries" class="country-options"></div>
+          <p id="campaign-country-status" class="field-help" role="status"></p>
+        </fieldset>
         <label>Start date<input id="draft-start" type="date" required></label>
         <label>End date<input id="draft-end" type="date" required></label>
       </div>
+      <section class="campaign-plan" aria-labelledby="campaign-plan-heading">
+        <div class="panel-heading"><div><p class="kicker">Country plan</p><h3 id="campaign-plan-heading">One campaign · separate rating targets</h3></div><label>Target rating<input id="campaign-plan-target" type="number" min="1" max="5" step="0.01" value="4.2"></label></div>
+        <p class="field-help" id="campaign-plan-period"></p>
+        <div class="campaign-plan-table"><table><thead><tr><th>Country</th><th>Current rating</th><th>30-day downloads</th><th>5★ needed</th><th>Planned emails</th></tr></thead><tbody id="campaign-plan-rows"></tbody></table></div>
+        <div id="campaign-plan-totals" class="campaign-plan-totals" aria-live="polite"></div>
+        <p class="field-help">Each country uses X = downloads × 3% as its assumed rating count. Emails = ceil(X ÷ (1% × 80%)), independently of the rating gap. Totals sum each country’s rounded plan; these are estimates, not campaign outcomes.</p>
+      </section>
       <label class="file-drop">Metabase USERID CSV (kept in memory only)
         <input id="user-id-file" type="file" accept=".csv,text/csv">
-        <span id="file-status">Choose a CSV. The USERID column may appear anywhere.</span>
+        <span id="file-status">Choose one combined audience CSV for the selected countries. The USERID column may appear anywhere.</span>
       </label>
       <label class="checkbox-label"><input id="rotate-links" type="checkbox"><span>Rotate secure links for users already registered to this campaign. Leave off for a normal retry.</span></label>
       <label>Rating-neutral campaign message<textarea id="campaign-message" rows="8"></textarea></label>
@@ -237,6 +251,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/app.js?v=20261005-target"></script>
+  <script type="module" src="js/app.js?v=20261020-countries"></script>
 </body>
 </html>

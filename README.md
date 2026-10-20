@@ -88,6 +88,17 @@ The selected country now has two independent calculations; the popup plan and mi
 
 ## Campaign workflow
 
+### Multi-country campaigns
+
+Use **Plan a multi-country campaign** in the rating planner or **Launch campaign** in Campaigns. Search and select countries with checkboxes; removable chips keep the selection visible. Select up to 26 countries for one campaign ID/name and one combined Metabase USERID CSV. TEST remains an exclusive internal cohort.
+
+The campaign planner shows each selected country's current rating, editable 30-day downloads, five-star requirement and independent email plan. It uses the current brand/store/reporting period, independently of the table's country/search/volume filters. Source-derived MTD estimates and manual totals are labeled; missing inputs yield partial totals with coverage counts. Each country is rounded before summing; no blended rating is used. The planner's target applies to this campaign planning view; no campaign record is created until preparation.
+
+Country selections are saved as sorted, deduplicated ISO codes in the existing `country` field, e.g. `BR,CL,MX`. This fits the deployed uploader's 80-character contract (26 codes occupy 77 characters) without modifying the uploader or existing Sheet schema. Single-country names/codes remain readable, including legacy names containing commas. The proxy rejects empty, unmapped, mixed TEST/production, and over-limit selections before forwarding.
+
+A campaign is represented once in aggregate KPIs and appears in each selected country's context. Its operational totals stay campaign-wide: participant records have no country, so country outcomes are not allocated or inferred. Multi-country table/funnel counts carry this label. Suggested IDs include a stable selection digest to distinguish groups, while custom IDs remain editable. Preparation locks the form while pending, invalidates stale results when campaign details change, and preserves the existing service's global eligibility, deduplication and retry receipts.
+
+
 The Screenshot Upload Participation Tracker now contains a validated `Campaigns` registry with this schema:
 
 ```text
